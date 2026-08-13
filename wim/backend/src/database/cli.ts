@@ -1,11 +1,13 @@
 /**
- * Comando de migrações.
+ * Comandos da base de dados.
  *
  *   npm run migrate          → aplica as migrações pendentes
  *   npm run migrate:status   → mostra o estado, sem alterar nada
+ *   npm run seed             → insere dados de exemplo (nunca em produção)
  */
 import { closePool } from './pool.js';
 import { getMigrationStatus, migrateUp } from './migrator.js';
+import { runSeeds } from './seeder.js';
 
 async function commandUp(): Promise<void> {
   const result = await migrateUp();
@@ -36,6 +38,13 @@ async function commandStatus(): Promise<void> {
   }
 }
 
+async function commandSeed(): Promise<void> {
+  const result = await runSeeds();
+
+  console.log(`Inseridos ${result.applied.length} ficheiro(s) de dados de exemplo:`);
+  for (const name of result.applied) console.log(`  ✔ ${name}`);
+}
+
 const command = process.argv[2] ?? 'up';
 
 try {
@@ -43,8 +52,10 @@ try {
     await commandUp();
   } else if (command === 'status') {
     await commandStatus();
+  } else if (command === 'seed') {
+    await commandSeed();
   } else {
-    console.error(`Comando desconhecido: "${command}". Use "up" ou "status".`);
+    console.error(`Comando desconhecido: "${command}". Use "up", "status" ou "seed".`);
     process.exitCode = 1;
   }
 } catch (error) {

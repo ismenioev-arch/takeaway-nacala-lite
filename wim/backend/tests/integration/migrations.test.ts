@@ -38,10 +38,10 @@ describe('migrações', () => {
     expect(names).toEqual([...names].sort());
   });
 
-  it('aplica as migrações pendentes', async () => {
+  it('aplica as migrações pendentes, por ordem', async () => {
     const result = await migrateUp();
 
-    expect(result.applied).toContain('001_initial.sql');
+    expect(result.applied).toEqual(['001_initial.sql', '002_core_domain.sql']);
     expect(await tableExists('schema_migrations')).toBe(true);
   });
 
@@ -50,10 +50,51 @@ describe('migrações', () => {
     expect(await tableExists('settings')).toBe(true);
   });
 
-  it('NÃO cria ainda as tabelas das fases seguintes', async () => {
-    // Guarda contra alguém adiantar trabalho para dentro da migração 001.
-    for (const table of ['messages', 'conversations', 'contacts', 'ai_drafts']) {
-      expect(await tableExists(table)).toBe(false);
+  it('cria todas as tabelas do domínio (FASE 2)', async () => {
+    const expected = [
+      'contacts',
+      'conversations',
+      'messages',
+      'message_analysis',
+      'ai_drafts',
+      'tags',
+      'conversation_tags',
+      'notifications',
+      'follow_ups',
+      'audit_logs',
+      'company_profile',
+      'company_services',
+      'company_prices',
+      'company_faqs',
+      'webhook_events',
+    ];
+
+    for (const table of expected) {
+      expect(await tableExists(table), `falta a tabela ${table}`).toBe(true);
+    }
+  });
+
+  it('cria os índices de que o painel depende', async () => {
+    // Sem estes índices o painel fica lento assim que houver mensagens a
+    // sério, e o problema só aparece meses depois.
+    const expected = [
+      'conversations_one_open_per_contact_idx',
+      'conversations_triage_idx',
+      'messages_conversation_idx',
+      'messages_pending_analysis_idx',
+      'ai_drafts_one_pending_per_message_idx',
+      'contacts_search_idx',
+      'follow_ups_due_idx',
+      'notifications_unread_idx',
+    ];
+
+    const result = await getPool().query<{ indexname: string }>(
+      `SELECT indexname FROM pg_indexes WHERE schemaname = 'public'`,
+    );
+    const existing = new Set(result.rows.map((row) => row.indexname));
+
+    for (const index of expected) {
+      expect(existing.has(index), `falta o índice ${index}`).toBe(true);
     }
   });
 

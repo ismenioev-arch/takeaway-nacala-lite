@@ -2,9 +2,10 @@
 
 Guia passo a passo. Escrito para quem não programa: siga pela ordem.
 
-> **Estado:** FASE 1 concluída. O sistema arranca, liga-se à base de dados e o
-> painel mostra o estado do servidor. Ainda **não** recebe mensagens do
-> WhatsApp nem usa a IA — isso chega nas fases 6 a 8.
+> **Estado:** FASE 2 concluída. O sistema arranca, liga-se à base de dados, o
+> painel mostra o estado do servidor e o modelo de dados completo está criado
+> e testado. Ainda **não** recebe mensagens do WhatsApp nem usa a IA — isso
+> chega nas fases 6 a 8. Ver [`01-BASE-DE-DADOS.md`](./01-BASE-DE-DADOS.md).
 
 ---
 
@@ -99,8 +100,15 @@ npm run migrate
 Deve ver:
 
 ```
-Aplicadas 1 migração(ões):
+Aplicadas 2 migração(ões):
   ✔ 001_initial.sql
+  ✔ 002_core_domain.sql
+```
+
+Opcional — inserir dados de exemplo para ver o sistema com conteúdo:
+
+```bash
+npm run seed
 ```
 
 Arrancar o servidor:
@@ -152,6 +160,7 @@ Abra <http://localhost:5173>. Deve ver **«Servidor: Ligado»** a verde.
 | `npm run lint` | Procura problemas no código |
 | `npm run migrate` | Aplica as migrações pendentes |
 | `npm run migrate:status` | Mostra o que está aplicado e o que falta |
+| `npm run seed` | Insere dados de exemplo (recusa correr em produção) |
 
 ### Painel (`wim/frontend`)
 
@@ -210,7 +219,7 @@ nome termine em `_test`, para nunca apagarem dados reais. Confirme que a base
 
 | Fase | O que traz |
 |---|---|
-| 2 | Tabelas de contactos, conversas, mensagens, análises e rascunhos |
+| ~~2~~ | ~~Tabelas de contactos, conversas, mensagens, análises e rascunhos~~ ✔ |
 | 3 | API base (contactos, conversas, mensagens) |
 | 4 | Login e permissões |
 | 5 | Painel com dados a sério |
