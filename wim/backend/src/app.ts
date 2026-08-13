@@ -10,7 +10,13 @@ import rateLimit from '@fastify/rate-limit';
 import Fastify, { type FastifyInstance } from 'fastify';
 import { getEnv } from './config/env.js';
 import { createLogger } from './config/logger.js';
+import { registerContactRoutes } from './controllers/contacts.controller.js';
+import { registerConversationRoutes } from './controllers/conversations.controller.js';
 import { registerHealthRoutes } from './controllers/health.controller.js';
+import {
+  registerMessageRoutes,
+  registerSearchRoutes,
+} from './controllers/messages.controller.js';
 import { registerErrorHandler } from './middleware/errors.js';
 import { registerRawBodyParser } from './middleware/raw-body.js';
 
@@ -59,7 +65,12 @@ export async function buildApp(): Promise<FastifyInstance> {
   });
 
   registerErrorHandler(app);
+
   registerHealthRoutes(app);
+  registerContactRoutes(app);
+  registerConversationRoutes(app);
+  registerMessageRoutes(app);
+  registerSearchRoutes(app);
 
   return app;
 }

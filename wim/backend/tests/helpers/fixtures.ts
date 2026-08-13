@@ -106,6 +106,84 @@ export async function createMessage(
   return result.rows[0]!.id;
 }
 
+export async function createAnalysis(
+  messageId: string,
+  overrides: {
+    priority?: string;
+    intent?: string;
+    summary?: string;
+    urgencyReason?: string | null;
+    requiresHuman?: boolean;
+    recommendedAction?: string | null;
+    confidence?: number;
+  } = {},
+): Promise<string> {
+  const priority = overrides.priority ?? 'NORMAL';
+  // A base de dados exige um motivo quando a prioridade é URGENTE.
+  const urgencyReason =
+    overrides.urgencyReason ?? (priority === 'URGENTE' ? 'Prazo imediato indicado pelo cliente.' : null);
+
+  const result = await getPool().query<{ id: string }>(
+    `INSERT INTO message_analysis
+       (message_id, priority, intent, confidence, summary, urgency_reason,
+        requires_human, recommended_action, model, prompt_version)
+     VALUES ($1, $2::message_priority, $3::message_intent, $4, $5, $6, $7, $8,
+             'claude-opus-5', 'v1')
+     RETURNING id`,
+    [
+      messageId,
+      priority,
+      overrides.intent ?? 'INFORMACAO',
+      overrides.confidence ?? 0.9,
+      overrides.summary ?? 'Resumo de teste.',
+      urgencyReason,
+      overrides.requiresHuman ?? false,
+      overrides.recommendedAction ?? null,
+    ],
+  );
+  return result.rows[0]!.id;
+}
+
+export async function createDraft(
+  messageId: string,
+  conversationId: string,
+  overrides: { level?: string; status?: string; content?: string } = {},
+): Promise<string> {
+  const result = await getPool().query<{ id: string }>(
+    `INSERT INTO ai_drafts (message_id, conversation_id, automation_level, content, status)
+     VALUES ($1, $2, $3::automation_level, $4, $5::draft_status)
+     RETURNING id`,
+    [
+      messageId,
+      conversationId,
+      overrides.level ?? 'DRAFT',
+      overrides.content ?? 'Recebi a sua mensagem. Vou verificar e retorno.',
+      overrides.status ?? 'DRAFT',
+    ],
+  );
+  return result.rows[0]!.id;
+}
+
+/** Ajusta as datas de uma conversa, para simular quem espera há mais tempo. */
+export async function setConversationTimestamps(
+  conversationId: string,
+  values: { lastMessageAt?: string; lastInboundAt?: string | null; lastOutboundAt?: string | null },
+): Promise<void> {
+  await getPool().query(
+    `UPDATE conversations
+        SET last_message_at  = coalesce($2::timestamptz, last_message_at),
+            last_inbound_at  = $3::timestamptz,
+            last_outbound_at = $4::timestamptz
+      WHERE id = $1`,
+    [
+      conversationId,
+      values.lastMessageAt ?? null,
+      values.lastInboundAt ?? null,
+      values.lastOutboundAt ?? null,
+    ],
+  );
+}
+
 /** Um conjunto completo: contacto → conversa → mensagem. */
 export async function createThread(): Promise<{
   contactId: string;

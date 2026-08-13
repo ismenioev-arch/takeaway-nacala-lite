@@ -2,10 +2,14 @@
 
 Guia passo a passo. Escrito para quem não programa: siga pela ordem.
 
-> **Estado:** FASE 2 concluída. O sistema arranca, liga-se à base de dados, o
-> painel mostra o estado do servidor e o modelo de dados completo está criado
-> e testado. Ainda **não** recebe mensagens do WhatsApp nem usa a IA — isso
-> chega nas fases 6 a 8. Ver [`01-BASE-DE-DADOS.md`](./01-BASE-DE-DADOS.md).
+> **Estado:** FASE 3 concluída. O sistema arranca, o modelo de dados está
+> criado e testado, e a API REST de contactos, conversas, mensagens e pesquisa
+> funciona. Ainda **não** tem autenticação (FASE 4) nem recebe mensagens do
+> WhatsApp (fases 6 a 8).
+>
+> ⚠️ **Sem autenticação, não coloque isto acessível na Internet.**
+>
+> Ver [`01-BASE-DE-DADOS.md`](./01-BASE-DE-DADOS.md) e [`02-API.md`](./02-API.md).
 
 ---
 
@@ -121,6 +125,8 @@ Confirmar noutro terminal:
 
 ```bash
 curl http://localhost:3001/api/health
+curl 'http://localhost:3001/api/contacts?pageSize=3'
+curl 'http://localhost:3001/api/search?q=cimentos'
 ```
 
 Resposta esperada:
@@ -220,7 +226,7 @@ nome termine em `_test`, para nunca apagarem dados reais. Confirme que a base
 | Fase | O que traz |
 |---|---|
 | ~~2~~ | ~~Tabelas de contactos, conversas, mensagens, análises e rascunhos~~ ✔ |
-| 3 | API base (contactos, conversas, mensagens) |
+| ~~3~~ | ~~API base (contactos, conversas, mensagens, pesquisa)~~ ✔ |
 | 4 | Login e permissões |
 | 5 | Painel com dados a sério |
 | 6 | Webhook do WhatsApp |
