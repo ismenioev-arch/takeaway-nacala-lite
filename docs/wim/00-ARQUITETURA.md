@@ -1,11 +1,23 @@
 # WIM — WhatsApp Intelligence Manager
 ## Documento de Arquitetura e Plano da Fase 1
 
-> **Estado:** proposta para aprovação. Nada foi implementado ainda.
+> **Estado:** aprovado. FASE 1 implementada e testada.
 > Conforme a secção 39 da especificação, este documento apresenta a análise,
 > a arquitetura, o modelo de dados, o fluxo, as dependências, as variáveis de
 > ambiente, a estratégia de testes, os riscos e o plano da FASE 1.
-> **Aguarda a sua autorização antes de qualquer implementação.**
+
+### Decisões tomadas pelo dono do projecto
+
+| Decisão | Escolha |
+|---|---|
+| Tecnologia do backend | **Node.js + TypeScript** (Opção B — ver secção 2) |
+| Localização do código | **`/wim`** neste repositório, isolado do takeaway |
+
+As restantes escolhas da especificação mantêm-se: PostgreSQL, API REST,
+React + TypeScript no painel, Docker, Claude para a IA e a Meta WhatsApp
+Cloud API oficial.
+
+👉 Para pôr o sistema a correr: **[`06-COMO-EXECUTAR.md`](./06-COMO-EXECUTAR.md)**
 
 ---
 
