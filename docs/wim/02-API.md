@@ -1,7 +1,10 @@
 # WIM — API REST
 
-> **Estado:** FASE 3 concluída. 15 endpoints de contactos, conversas,
-> mensagens e pesquisa. **Ainda sem autenticação** — chega na FASE 4.
+> **Estado:** FASE 4 concluída. 24 endpoints de autenticação, utilizadores,
+> contactos, conversas, mensagens e pesquisa.
+>
+> **Todos exigem sessão iniciada**, excepto `/api/health` e as rotas de
+> entrada. Ver [`05-SEGURANCA.md`](./05-SEGURANCA.md).
 
 ---
 
@@ -61,6 +64,9 @@ Sempre a mesma forma, com um `requestId` que aparece também nos logs:
 | Código | Quando |
 |---|---|
 | `VALIDATION_ERROR` (400) | Entrada inválida — `details` diz que campo e porquê |
+| `UNAUTHORIZED` (401) | Sem sessão, ou sessão inválida/expirada |
+| `FORBIDDEN` (403) | Sem permissão para esta operação |
+| `TOO_MANY_ATTEMPTS` (429) | Demasiadas tentativas de entrada falhadas |
 | `NOT_FOUND` (404) | O recurso não existe |
 | `CONFLICT` (409) | A operação choca com o estado actual |
 | `INVALID_JSON` (400) | O corpo não é JSON válido |
@@ -72,6 +78,29 @@ Datas viajam sempre em **ISO 8601 UTC**.
 
 ## 3. Endpoints
 
+### Autenticação (secção 25)
+
+| Método | Rota | Sessão? |
+|---|---|---|
+| `POST` | `/api/auth/login` | pública |
+| `POST` | `/api/auth/refresh` | pública |
+| `POST` | `/api/auth/logout` | pública |
+| `GET` | `/api/auth/me` | exigida |
+| `POST` | `/api/auth/change-password` | exigida |
+| `POST` | `/api/auth/logout-all` | exigida |
+| `GET` | `/api/users` | `ADMIN` |
+| `POST` | `/api/users` | `ADMIN` |
+
+O login devolve `accessToken` (15 minutos), `refreshToken` (30 dias) e
+`expiresIn`. Em cada pedido:
+
+```
+Authorization: Bearer <accessToken>
+```
+
+Detalhes de rotação, detecção de roubo e travão de força bruta em
+[`05-SEGURANCA.md`](./05-SEGURANCA.md).
+
 ### Contactos (secção 13)
 
 | Método | Rota | Descrição |
@@ -80,7 +109,7 @@ Datas viajam sempre em **ISO 8601 UTC**.
 | `GET` | `/api/contacts/:id` | Um contacto |
 | `POST` | `/api/contacts` | Cria (201) |
 | `PATCH` | `/api/contacts/:id` | Actualiza os campos indicados |
-| `DELETE` | `/api/contacts/:id` | Apaga (204) |
+| `DELETE` | `/api/contacts/:id` | Apaga (204) — **exige `ADMIN`** |
 
 **Filtros:** `q`, `category` (repetível), `page`, `pageSize`,
 `sortBy` (`lastContactAt` \| `firstContactAt` \| `name`), `sortDirection`.
@@ -241,16 +270,14 @@ Estas acções ficam registadas com valor antigo e novo:
 
 Um `PATCH` que não muda nada **não** gera registo.
 
-**Limitação conhecida desta fase:** sem autenticação, `user_id` fica a `null`
-(«acção do sistema») e só se regista o endereço e o cliente. A FASE 4 preenche
-o utilizador — os serviços já recebem um `Actor`, nada mais tem de mudar.
+Desde a FASE 4, cada registo guarda **quem** fez a acção, além do endereço e
+do cliente. As acções de autenticação (`auth.login`, `auth.login_failed`,
+`auth.refresh_reuse_detected`, …) estão em [`05-SEGURANCA.md`](./05-SEGURANCA.md).
 
 ---
 
-## 7. O que a FASE 3 não faz
+## 7. O que ainda não existe
 
-- **Sem autenticação nem permissões** — todos os endpoints estão abertos.
-  É a FASE 4. **Não colocar em produção assim.**
 - Sem envio de mensagens: `POST /api/messages/send` e a aprovação de rascunhos
   dependem do WhatsAppService (fases 6 e 11).
 - Sem endpoints de definições, métricas, notificações e follow-ups.
@@ -262,11 +289,21 @@ o utilizador — os serviços já recebem um `Actor`, nada mais tem de mudar.
 
 ```bash
 cd wim/backend
-npm run migrate && npm run seed && npm run dev
+npm run setup:env       # gera os segredos de sessão
+npm run migrate && npm run seed
+npm run create-user     # o primeiro fica OWNER
+npm run dev
 ```
 
 ```bash
-curl 'http://localhost:3001/api/contacts?pageSize=3'
-curl 'http://localhost:3001/api/conversations/counts'
-curl 'http://localhost:3001/api/search?q=cimentos'
+# 1. entrar e guardar o token
+TOKEN=$(curl -s -X POST http://localhost:3001/api/auth/login \
+  -H 'content-type: application/json' \
+  -d '{"email":"SEU-EMAIL","password":"SUA-PASSWORD"}' \
+  | python3 -c 'import sys,json;print(json.load(sys.stdin)["accessToken"])')
+
+# 2. usar a API
+curl -H "Authorization: Bearer $TOKEN" 'http://localhost:3001/api/contacts?pageSize=3'
+curl -H "Authorization: Bearer $TOKEN" 'http://localhost:3001/api/conversations/counts'
+curl -H "Authorization: Bearer $TOKEN" 'http://localhost:3001/api/search?q=cimentos'
 ```

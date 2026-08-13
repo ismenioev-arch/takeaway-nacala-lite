@@ -19,6 +19,17 @@ export const AUDIT_ACTIONS = {
   conversationUpdated: 'conversation.updated',
   conversationResolved: 'conversation.resolved',
   conversationReopened: 'conversation.reopened',
+
+  // Autenticação (secção 25). Ficam no mesmo registo de propósito: um
+  // relatório de auditoria tem de poder cruzar "quem entrou" com "quem
+  // aprovou o quê" sem juntar duas listas diferentes.
+  login: 'auth.login',
+  loginFailed: 'auth.login_failed',
+  logout: 'auth.logout',
+  tokenRefreshed: 'auth.token_refreshed',
+  refreshReuseDetected: 'auth.refresh_reuse_detected',
+  passwordChanged: 'auth.password_changed',
+  userCreated: 'auth.user_created',
 } as const;
 
 export type AuditAction = (typeof AUDIT_ACTIONS)[keyof typeof AUDIT_ACTIONS];

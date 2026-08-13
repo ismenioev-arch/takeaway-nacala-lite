@@ -17,14 +17,18 @@
     "migrate:status": "tsx src/database/cli.ts status",
     "seed": "tsx src/database/cli.ts seed",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "setup:env": "tsx src/cli/setup-env.ts",
+    "create-user": "tsx src/cli/create-user.ts"
   },
   "dependencies": {
     "@fastify/cors": "^10.0.1",
     "@fastify/helmet": "^12.0.1",
     "@fastify/rate-limit": "^10.2.1",
+    "argon2": "^0.45.1",
     "dotenv": "^16.4.7",
     "fastify": "^5.2.1",
+    "jose": "^6.2.8",
     "pg": "^8.13.1",
     "pino": "^9.6.0",
     "zod": "^3.24.1"

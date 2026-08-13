@@ -14,9 +14,17 @@ import {
   createMessage,
   freshSchema,
 } from '../helpers/fixtures.js';
-import { call, query, startTestApp, type ApiErrorBody } from '../helpers/api.js';
+import {
+  authenticateAs,
+  query,
+  startTestApp,
+  type ApiErrorBody,
+  type AuthenticatedClient,
+} from '../helpers/api.js';
 
 let app: FastifyInstance;
+/** Cliente com sessão iniciada: a partir da FASE 4 a API exige-a. */
+let api: AuthenticatedClient['call'];
 let contactId: string;
 let conversationId: string;
 let inboundMessageId: string;
@@ -56,6 +64,7 @@ beforeAll(async () => {
   ]);
 
   app = await startTestApp();
+  api = (await authenticateAs(app, { role: 'OWNER' })).call;
 });
 
 afterAll(async () => {
@@ -65,7 +74,7 @@ afterAll(async () => {
 
 describe('GET /api/messages', () => {
   it('devolve o histórico por ordem cronológica', async () => {
-    const { status, body } = await call<Paginated<MessageDto>>(app, {
+    const { status, body } = await api<Paginated<MessageDto>>({
       method: 'GET',
       url: `/api/messages${query({ conversationId })}`,
     });
@@ -78,7 +87,7 @@ describe('GET /api/messages', () => {
   });
 
   it('traz a análise da IA junto da mensagem (secção 11)', async () => {
-    const { body } = await call<Paginated<MessageDto>>(app, {
+    const { body } = await api<Paginated<MessageDto>>({
       method: 'GET',
       url: `/api/messages${query({ conversationId })}`,
     });
@@ -96,7 +105,7 @@ describe('GET /api/messages', () => {
   });
 
   it('traz o rascunho sugerido e marca-o como precisando de aprovação', async () => {
-    const { body } = await call<Paginated<MessageDto>>(app, {
+    const { body } = await api<Paginated<MessageDto>>({
       method: 'GET',
       url: `/api/messages${query({ conversationId })}`,
     });
@@ -116,7 +125,7 @@ describe('GET /api/messages', () => {
       [inboundMessageId, 'Bom dia João, passo na obra amanhã às 09h00.'],
     );
 
-    const { body } = await call<Paginated<MessageDto>>(app, {
+    const { body } = await api<Paginated<MessageDto>>({
       method: 'GET',
       url: `/api/messages${query({ conversationId })}`,
     });
@@ -129,7 +138,7 @@ describe('GET /api/messages', () => {
   });
 
   it('mensagens de saída não têm análise nem rascunho', async () => {
-    const { body } = await call<Paginated<MessageDto>>(app, {
+    const { body } = await api<Paginated<MessageDto>>({
       method: 'GET',
       url: `/api/messages${query({ conversationId, direction: 'OUTBOUND' })}`,
     });
@@ -140,7 +149,7 @@ describe('GET /api/messages', () => {
   });
 
   it('filtra por direcção', async () => {
-    const { body } = await call<Paginated<MessageDto>>(app, {
+    const { body } = await api<Paginated<MessageDto>>({
       method: 'GET',
       url: `/api/messages${query({ conversationId, direction: 'INBOUND' })}`,
     });
@@ -150,7 +159,7 @@ describe('GET /api/messages', () => {
   });
 
   it('permite ordem inversa, para carregar o fim da conversa primeiro', async () => {
-    const { body } = await call<Paginated<MessageDto>>(app, {
+    const { body } = await api<Paginated<MessageDto>>({
       method: 'GET',
       url: `/api/messages${query({ conversationId, sortDirection: 'desc' })}`,
     });
@@ -160,7 +169,7 @@ describe('GET /api/messages', () => {
   });
 
   it('pesquisa no texto das mensagens', async () => {
-    const { body } = await call<Paginated<MessageDto>>(app, {
+    const { body } = await api<Paginated<MessageDto>>({
       method: 'GET',
       url: `/api/messages${query({ q: 'fundação' })}`,
     });
@@ -172,7 +181,7 @@ describe('GET /api/messages', () => {
   it('exige pelo menos um filtro', async () => {
     // Sem filtro devolveria mensagens de clientes misturados — nunca é o que
     // se pretende, e seria pesado.
-    const { status, body } = await call<ApiErrorBody>(app, {
+    const { status, body } = await api<ApiErrorBody>({
       method: 'GET',
       url: '/api/messages',
     });
@@ -183,7 +192,7 @@ describe('GET /api/messages', () => {
 
   it('devolve 404 quando a conversa não existe', async () => {
     // 404 distingue "não existe" de "existe mas está vazia".
-    const { status } = await call(app, {
+    const { status } = await api({
       method: 'GET',
       url: `/api/messages${query({
         conversationId: '00000000-0000-4000-8000-000000000000',
@@ -196,7 +205,7 @@ describe('GET /api/messages', () => {
 
 describe('GET /api/messages/:id', () => {
   it('devolve uma mensagem com o seu contexto', async () => {
-    const { status, body } = await call<MessageDto>(app, {
+    const { status, body } = await api<MessageDto>({
       method: 'GET',
       url: `/api/messages/${inboundMessageId}`,
     });
@@ -207,7 +216,7 @@ describe('GET /api/messages/:id', () => {
   });
 
   it('devolve 404 para uma mensagem inexistente', async () => {
-    const { status } = await call(app, {
+    const { status } = await api({
       method: 'GET',
       url: '/api/messages/00000000-0000-4000-8000-000000000000',
     });
@@ -218,7 +227,7 @@ describe('GET /api/messages/:id', () => {
 
 describe('POST /api/conversations/:id/read', () => {
   it('põe as não lidas a zero', async () => {
-    const { status } = await call(app, {
+    const { status } = await api({
       method: 'POST',
       url: `/api/conversations/${conversationId}/read`,
     });
@@ -233,7 +242,7 @@ describe('POST /api/conversations/:id/read', () => {
   });
 
   it('devolve 404 para uma conversa inexistente', async () => {
-    const { status } = await call(app, {
+    const { status } = await api({
       method: 'POST',
       url: '/api/conversations/00000000-0000-4000-8000-000000000000/read',
     });
@@ -244,7 +253,7 @@ describe('POST /api/conversations/:id/read', () => {
 
 describe('GET /api/search (secção 30)', () => {
   it('procura em contactos, conversas e mensagens ao mesmo tempo', async () => {
-    const { status, body } = await call<SearchResultDto>(app, {
+    const { status, body } = await api<SearchResultDto>({
       method: 'GET',
       url: `/api/search${query({ q: 'macuácua' })}`,
     });
@@ -256,7 +265,7 @@ describe('GET /api/search (secção 30)', () => {
   });
 
   it('encontra por texto da mensagem e devolve o excerto com contexto', async () => {
-    const { body } = await call<SearchResultDto>(app, {
+    const { body } = await api<SearchResultDto>({
       method: 'GET',
       url: `/api/search${query({ q: 'fundação' })}`,
     });
@@ -273,7 +282,7 @@ describe('GET /api/search (secção 30)', () => {
     );
     const digits = contact.rows[0]!.phone_e164.slice(-6);
 
-    const { body } = await call<SearchResultDto>(app, {
+    const { body } = await api<SearchResultDto>({
       method: 'GET',
       url: `/api/search${query({ q: digits })}`,
     });
@@ -282,7 +291,7 @@ describe('GET /api/search (secção 30)', () => {
   });
 
   it('devolve listas vazias quando não encontra nada', async () => {
-    const { status, body } = await call<SearchResultDto>(app, {
+    const { status, body } = await api<SearchResultDto>({
       method: 'GET',
       url: `/api/search${query({ q: 'zzzinexistente' })}`,
     });
@@ -292,14 +301,14 @@ describe('GET /api/search (secção 30)', () => {
   });
 
   it('exige um termo de pesquisa', async () => {
-    const { status } = await call(app, { method: 'GET', url: '/api/search' });
+    const { status } = await api({ method: 'GET', url: '/api/search' });
     expect(status).toBe(400);
   });
 
   it('trata o texto de pesquisa como dados, não como padrão SQL', async () => {
     // Um '%' escrito pelo utilizador não pode transformar-se em curinga que
     // devolve tudo, nem quebrar a consulta.
-    const { status, body } = await call<SearchResultDto>(app, {
+    const { status, body } = await api<SearchResultDto>({
       method: 'GET',
       url: `/api/search${query({ q: "%' OR '1'='1" })}`,
     });

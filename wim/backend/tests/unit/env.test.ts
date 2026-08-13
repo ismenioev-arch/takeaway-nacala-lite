@@ -6,15 +6,17 @@
 import { describe, expect, it } from 'vitest';
 import { EnvValidationError, parseEnv } from '../../src/config/env.js';
 
+// A partir da FASE 4 os segredos de sessão são obrigatórios em qualquer
+// ambiente: sem eles não é possível emitir nem verificar sessões.
 const validEnv = {
   DATABASE_URL: 'postgresql://user:pass@localhost:5432/wim',
+  JWT_ACCESS_SECRET: 'a'.repeat(40),
+  JWT_REFRESH_SECRET: 'b'.repeat(40),
 };
 
 const productionEnv = {
   ...validEnv,
   NODE_ENV: 'production',
-  JWT_ACCESS_SECRET: 'a'.repeat(40),
-  JWT_REFRESH_SECRET: 'b'.repeat(40),
   WHATSAPP_APP_SECRET: 'c'.repeat(20),
   WHATSAPP_VERIFY_TOKEN: 'd'.repeat(20),
   WHATSAPP_ACCESS_TOKEN: 'EAAG...token',
@@ -41,10 +43,12 @@ describe('parseEnv', () => {
   });
 
   it('recusa arrancar sem DATABASE_URL, e diz qual falta', () => {
-    expect(() => parseEnv({})).toThrow(EnvValidationError);
+    const semBaseDeDados = { ...validEnv, DATABASE_URL: undefined };
+
+    expect(() => parseEnv(semBaseDeDados)).toThrow(EnvValidationError);
 
     try {
-      parseEnv({});
+      parseEnv(semBaseDeDados);
       expect.unreachable('devia ter lançado');
     } catch (error) {
       expect(error).toBeInstanceOf(EnvValidationError);
@@ -94,8 +98,6 @@ describe('parseEnv', () => {
       } catch (error) {
         const issues = (error as EnvValidationError).issues.join('\n');
 
-        expect(issues).toContain('JWT_ACCESS_SECRET');
-        expect(issues).toContain('JWT_REFRESH_SECRET');
         expect(issues).toContain('WHATSAPP_APP_SECRET');
         expect(issues).toContain('WHATSAPP_VERIFY_TOKEN');
         expect(issues).toContain('WHATSAPP_ACCESS_TOKEN');
@@ -152,7 +154,25 @@ describe('parseEnv', () => {
     });
 
     it('continua a recusar uma variável obrigatória vazia', () => {
-      expect(() => parseEnv({ DATABASE_URL: '' })).toThrow(/DATABASE_URL/);
+      expect(() => parseEnv({ ...validEnv, DATABASE_URL: '' })).toThrow(/DATABASE_URL/);
+    });
+
+    it('recusa arrancar sem os segredos de sessão', () => {
+      // Sem eles não há autenticação possível — por isso são obrigatórios
+      // em qualquer ambiente, e não apenas em produção.
+      expect(() =>
+        parseEnv({ DATABASE_URL: 'postgresql://user:pass@localhost:5432/wim' }),
+      ).toThrow(/JWT_ACCESS_SECRET/);
+    });
+
+    it('a mensagem de erro diz como gerar um segredo', () => {
+      try {
+        parseEnv({ DATABASE_URL: 'postgresql://user:pass@localhost:5432/wim' });
+        expect.unreachable('devia ter lançado');
+      } catch (error) {
+        expect((error as EnvValidationError).message).toContain('openssl rand');
+        expect((error as EnvValidationError).message).toContain('npm run setup:env');
+      }
     });
 
     it('em produção, um segredo vazio conta como em falta', () => {

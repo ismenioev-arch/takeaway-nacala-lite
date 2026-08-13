@@ -18,7 +18,7 @@ export default tseslint.config(
   },
   {
     // Ferramentas de linha de comandos escrevem para o terminal de propósito.
-    files: ['src/database/cli.ts'],
+    files: ['src/database/cli.ts', 'src/cli/**/*.ts'],
     rules: { 'no-console': 'off' },
   },
 );

@@ -48,9 +48,22 @@ const baseSchema = z.object({
   RATE_LIMIT_MAX: z.coerce.number().int().positive().default(100),
   RATE_LIMIT_WINDOW: durationString.default('1m'),
 
-  // ── Autenticação (usada a partir da FASE 4) ─────────────────────────────
-  JWT_ACCESS_SECRET: secret().optional(),
-  JWT_REFRESH_SECRET: secret().optional(),
+  // Limite específico do login, por endereço. Mais apertado do que o global,
+  // porque o login é o alvo natural de quem tenta adivinhar passwords.
+  //
+  // É configurável porque num escritório com um único IP de saída todas as
+  // pessoas partilham este contador — um valor demasiado baixo trancaria a
+  // equipa inteira à porta. O travão que interessa é o outro: o bloqueio POR
+  // CONTA, guardado na base de dados, que nenhum IP partilhado contorna.
+  LOGIN_RATE_LIMIT_MAX: z.coerce.number().int().positive().default(10),
+  LOGIN_RATE_LIMIT_WINDOW: durationString.default('1m'),
+
+  // ── Autenticação (obrigatória desde a FASE 4) ───────────────────────────
+  // Sem estes segredos não é possível emitir nem verificar sessões, por isso
+  // são obrigatórios em qualquer ambiente. Gere cada um com:
+  //     openssl rand -base64 48
+  JWT_ACCESS_SECRET: secret(),
+  JWT_REFRESH_SECRET: secret(),
   JWT_ACCESS_TTL: durationString.default('15m'),
   JWT_REFRESH_TTL: durationString.default('30d'),
 
@@ -74,8 +87,6 @@ const baseSchema = z.object({
  * Assim ninguém coloca o sistema em produção sem o segredo do webhook.
  */
 const productionRequired = [
-  'JWT_ACCESS_SECRET',
-  'JWT_REFRESH_SECRET',
   'WHATSAPP_APP_SECRET',
   'WHATSAPP_VERIFY_TOKEN',
   'WHATSAPP_ACCESS_TOKEN',
@@ -119,6 +130,8 @@ export class EnvValidationError extends Error {
         ...issues.map((issue) => `  • ${issue}`),
         '',
         'Verifique o ficheiro .env (use .env.example como referência).',
+        'Para gerar um segredo:  openssl rand -base64 48',
+        'Ou corra:  npm run setup:env'
       ].join('\n'),
     );
     this.name = 'EnvValidationError';

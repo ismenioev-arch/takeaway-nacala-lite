@@ -19,9 +19,17 @@ import {
   freshSchema,
   setConversationTimestamps,
 } from '../helpers/fixtures.js';
-import { call, query, startTestApp, type ApiErrorBody } from '../helpers/api.js';
+import {
+  authenticateAs,
+  query,
+  startTestApp,
+  type ApiErrorBody,
+  type AuthenticatedClient,
+} from '../helpers/api.js';
 
 let app: FastifyInstance;
+/** Cliente com sessão iniciada: a partir da FASE 4 a API exige-a. */
+let api: AuthenticatedClient['call'];
 
 /** Identificadores do cenário, para os testes se referirem a casos concretos. */
 const scenario = {
@@ -145,6 +153,7 @@ beforeAll(async () => {
   await freshSchema();
   await buildScenario();
   app = await startTestApp();
+  api = (await authenticateAs(app, { role: 'OWNER' })).call;
 });
 
 afterAll(async () => {
@@ -154,7 +163,7 @@ afterAll(async () => {
 
 describe('GET /api/conversations', () => {
   it('devolve todas as conversas com contacto e análise embutidos', async () => {
-    const { status, body } = await call<Paginated<ConversationDto>>(app, {
+    const { status, body } = await api<Paginated<ConversationDto>>({
       method: 'GET',
       url: '/api/conversations',
     });
@@ -173,7 +182,7 @@ describe('GET /api/conversations', () => {
   it('ordena por prioridade com as urgências primeiro, sem indicar o sentido', async () => {
     // Sem `sortDirection`, ordenar por prioridade tem de dar urgentes no topo.
     // "Descendente" ali poria as normais primeiro — o contrário do esperado.
-    const { body } = await call<Paginated<ConversationDto>>(app, {
+    const { body } = await api<Paginated<ConversationDto>>({
       method: 'GET',
       url: `/api/conversations${query({ sortBy: 'priority', resolved: 'false' })}`,
     });
@@ -187,7 +196,7 @@ describe('GET /api/conversations', () => {
   });
 
   it('filtra por prioridade', async () => {
-    const { body } = await call<Paginated<ConversationDto>>(app, {
+    const { body } = await api<Paginated<ConversationDto>>({
       method: 'GET',
       url: `/api/conversations${query({ priority: ['URGENTE', 'IMPORTANTE'] })}`,
     });
@@ -196,7 +205,7 @@ describe('GET /api/conversations', () => {
   });
 
   it('filtra por estado', async () => {
-    const { body } = await call<Paginated<ConversationDto>>(app, {
+    const { body } = await api<Paginated<ConversationDto>>({
       method: 'GET',
       url: `/api/conversations${query({ status: 'WAITING_HUMAN' })}`,
     });
@@ -206,7 +215,7 @@ describe('GET /api/conversations', () => {
   });
 
   it('filtra por intenção detectada pela IA', async () => {
-    const { body } = await call<Paginated<ConversationDto>>(app, {
+    const { body } = await api<Paginated<ConversationDto>>({
       method: 'GET',
       url: `/api/conversations${query({ intent: 'ORCAMENTO' })}`,
     });
@@ -216,7 +225,7 @@ describe('GET /api/conversations', () => {
   });
 
   it('filtra as não respondidas', async () => {
-    const { body } = await call<Paginated<ConversationDto>>(app, {
+    const { body } = await api<Paginated<ConversationDto>>({
       method: 'GET',
       url: `/api/conversations${query({ unanswered: 'true' })}`,
     });
@@ -229,7 +238,7 @@ describe('GET /api/conversations', () => {
   });
 
   it('filtra as que aguardam aprovação', async () => {
-    const { body } = await call<Paginated<ConversationDto>>(app, {
+    const { body } = await api<Paginated<ConversationDto>>({
       method: 'GET',
       url: `/api/conversations${query({ awaitingApproval: 'true' })}`,
     });
@@ -240,7 +249,7 @@ describe('GET /api/conversations', () => {
   });
 
   it('exclui resolvidas e arquivadas quando resolved=false', async () => {
-    const { body } = await call<Paginated<ConversationDto>>(app, {
+    const { body } = await api<Paginated<ConversationDto>>({
       method: 'GET',
       url: `/api/conversations${query({ resolved: 'false' })}`,
     });
@@ -250,7 +259,7 @@ describe('GET /api/conversations', () => {
   });
 
   it('mostra só as resolvidas quando resolved=true', async () => {
-    const { body } = await call<Paginated<ConversationDto>>(app, {
+    const { body } = await api<Paginated<ConversationDto>>({
       method: 'GET',
       url: `/api/conversations${query({ resolved: 'true' })}`,
     });
@@ -260,13 +269,13 @@ describe('GET /api/conversations', () => {
   });
 
   it('filtra por contacto', async () => {
-    const all = await call<Paginated<ConversationDto>>(app, {
+    const all = await api<Paginated<ConversationDto>>({
       method: 'GET',
       url: '/api/conversations',
     });
     const contactId = all.body.data[0]!.contact.id;
 
-    const { body } = await call<Paginated<ConversationDto>>(app, {
+    const { body } = await api<Paginated<ConversationDto>>({
       method: 'GET',
       url: `/api/conversations${query({ contactId })}`,
     });
@@ -275,7 +284,7 @@ describe('GET /api/conversations', () => {
   });
 
   it('filtra por intervalo de datas', async () => {
-    const { body } = await call<Paginated<ConversationDto>>(app, {
+    const { body } = await api<Paginated<ConversationDto>>({
       method: 'GET',
       url: `/api/conversations${query({
         dateFrom: '2026-08-13T06:30:00Z',
@@ -290,7 +299,7 @@ describe('GET /api/conversations', () => {
   });
 
   it('recusa um intervalo de datas invertido', async () => {
-    const { status, body } = await call<ApiErrorBody>(app, {
+    const { status, body } = await api<ApiErrorBody>({
       method: 'GET',
       url: `/api/conversations${query({
         dateFrom: '2026-08-14T00:00:00Z',
@@ -303,7 +312,7 @@ describe('GET /api/conversations', () => {
   });
 
   it('pesquisa no texto das mensagens', async () => {
-    const { body } = await call<Paginated<ConversationDto>>(app, {
+    const { body } = await api<Paginated<ConversationDto>>({
       method: 'GET',
       url: `/api/conversations${query({ q: 'horário' })}`,
     });
@@ -313,7 +322,7 @@ describe('GET /api/conversations', () => {
   });
 
   it('pesquisa pelo nome do contacto', async () => {
-    const { body } = await call<Paginated<ConversationDto>>(app, {
+    const { body } = await api<Paginated<ConversationDto>>({
       method: 'GET',
       url: `/api/conversations${query({ q: 'macuácua' })}`,
     });
@@ -323,7 +332,7 @@ describe('GET /api/conversations', () => {
   });
 
   it('combina vários filtros ao mesmo tempo', async () => {
-    const { body } = await call<Paginated<ConversationDto>>(app, {
+    const { body } = await api<Paginated<ConversationDto>>({
       method: 'GET',
       url: `/api/conversations${query({
         resolved: 'false',
@@ -337,7 +346,7 @@ describe('GET /api/conversations', () => {
   });
 
   it('devolve lista vazia, e não erro, quando nada corresponde', async () => {
-    const { status, body } = await call<Paginated<ConversationDto>>(app, {
+    const { status, body } = await api<Paginated<ConversationDto>>({
       method: 'GET',
       url: `/api/conversations${query({ q: 'xyzinexistente' })}`,
     });
@@ -351,7 +360,7 @@ describe('GET /api/conversations', () => {
 
 describe('GET /api/conversations/counts (secção 9)', () => {
   it('devolve os cartões do painel', async () => {
-    const { status, body } = await call<ConversationCounts>(app, {
+    const { status, body } = await api<ConversationCounts>({
       method: 'GET',
       url: '/api/conversations/counts',
     });
@@ -370,7 +379,7 @@ describe('GET /api/conversations/counts (secção 9)', () => {
   });
 
   it('não conta as resolvidas no total em aberto', async () => {
-    const { body } = await call<ConversationCounts>(app, {
+    const { body } = await api<ConversationCounts>({
       method: 'GET',
       url: '/api/conversations/counts',
     });
@@ -382,7 +391,7 @@ describe('GET /api/conversations/counts (secção 9)', () => {
 
 describe('GET /api/conversations/attention (secção 10)', () => {
   it('coloca a urgência em primeiro lugar', async () => {
-    const { status, body } = await call<{ data: AttentionItemDto[] }>(app, {
+    const { status, body } = await api<{ data: AttentionItemDto[] }>({
       method: 'GET',
       url: '/api/conversations/attention',
     });
@@ -393,7 +402,7 @@ describe('GET /api/conversations/attention (secção 10)', () => {
   });
 
   it('devolve tudo o que o cartão da secção 10 precisa', async () => {
-    const { body } = await call<{ data: AttentionItemDto[] }>(app, {
+    const { body } = await api<{ data: AttentionItemDto[] }>({
       method: 'GET',
       url: '/api/conversations/attention',
     });
@@ -408,7 +417,7 @@ describe('GET /api/conversations/attention (secção 10)', () => {
   });
 
   it('exclui as resolvidas', async () => {
-    const { body } = await call<{ data: AttentionItemDto[] }>(app, {
+    const { body } = await api<{ data: AttentionItemDto[] }>({
       method: 'GET',
       url: '/api/conversations/attention',
     });
@@ -417,7 +426,7 @@ describe('GET /api/conversations/attention (secção 10)', () => {
   });
 
   it('inclui a que tem rascunho por aprovar', async () => {
-    const { body } = await call<{ data: AttentionItemDto[] }>(app, {
+    const { body } = await api<{ data: AttentionItemDto[] }>({
       method: 'GET',
       url: '/api/conversations/attention',
     });
@@ -427,7 +436,7 @@ describe('GET /api/conversations/attention (secção 10)', () => {
   });
 
   it('respeita o limite pedido', async () => {
-    const { body } = await call<{ data: AttentionItemDto[] }>(app, {
+    const { body } = await api<{ data: AttentionItemDto[] }>({
       method: 'GET',
       url: `/api/conversations/attention${query({ limit: 1 })}`,
     });
@@ -437,7 +446,7 @@ describe('GET /api/conversations/attention (secção 10)', () => {
 
   it('não confunde /attention com /:id', async () => {
     // Se o Fastify tratasse "attention" como um id, isto daria 400.
-    const { status } = await call(app, {
+    const { status } = await api({
       method: 'GET',
       url: '/api/conversations/attention',
     });
@@ -448,7 +457,7 @@ describe('GET /api/conversations/attention (secção 10)', () => {
 
 describe('PATCH /api/conversations/:id', () => {
   it('altera a prioridade e regista a auditoria', async () => {
-    const { status, body } = await call<ConversationDto>(app, {
+    const { status, body } = await api<ConversationDto>({
       method: 'PATCH',
       url: `/api/conversations/${scenario.normal}`,
       payload: { priority: 'IMPORTANTE', subject: 'Horários' },
@@ -471,7 +480,7 @@ describe('PATCH /api/conversations/:id', () => {
   it('encaminha para o endpoint próprio em vez de resolver por PATCH', async () => {
     // Resolver por PATCH deixaria `resolved_at` por preencher e a constraint
     // da base de dados recusaria com um erro pouco claro.
-    const { status, body } = await call<ApiErrorBody>(app, {
+    const { status, body } = await api<ApiErrorBody>({
       method: 'PATCH',
       url: `/api/conversations/${scenario.normal}`,
       payload: { status: 'RESOLVED' },
@@ -482,7 +491,7 @@ describe('PATCH /api/conversations/:id', () => {
   });
 
   it('devolve 404 para uma conversa inexistente', async () => {
-    const { status } = await call(app, {
+    const { status } = await api({
       method: 'PATCH',
       url: '/api/conversations/00000000-0000-4000-8000-000000000000',
       payload: { priority: 'NORMAL' },
@@ -494,7 +503,7 @@ describe('PATCH /api/conversations/:id', () => {
 
 describe('POST /api/conversations/:id/resolve', () => {
   it('resolve, preenche a data e limpa as não lidas', async () => {
-    const { status, body } = await call<ConversationDto>(app, {
+    const { status, body } = await api<ConversationDto>({
       method: 'POST',
       url: `/api/conversations/${scenario.acompanhar}/resolve`,
     });
@@ -506,7 +515,7 @@ describe('POST /api/conversations/:id/resolve', () => {
   });
 
   it('recusa resolver duas vezes', async () => {
-    const { status, body } = await call<ApiErrorBody>(app, {
+    const { status, body } = await api<ApiErrorBody>({
       method: 'POST',
       url: `/api/conversations/${scenario.acompanhar}/resolve`,
     });
@@ -528,7 +537,7 @@ describe('POST /api/conversations/:id/resolve', () => {
 
 describe('POST /api/conversations/:id/reopen', () => {
   it('reabre uma conversa resolvida', async () => {
-    const { status, body } = await call<ConversationDto>(app, {
+    const { status, body } = await api<ConversationDto>({
       method: 'POST',
       url: `/api/conversations/${scenario.acompanhar}/reopen`,
     });
@@ -539,7 +548,7 @@ describe('POST /api/conversations/:id/reopen', () => {
   });
 
   it('recusa reabrir uma conversa que não está resolvida', async () => {
-    const { status, body } = await call<ApiErrorBody>(app, {
+    const { status, body } = await api<ApiErrorBody>({
       method: 'POST',
       url: `/api/conversations/${scenario.urgente}/reopen`,
     });
@@ -560,7 +569,7 @@ describe('POST /api/conversations/:id/reopen', () => {
     );
     await createConversation(contactId, { status: 'OPEN' });
 
-    const { status, body } = await call<ApiErrorBody>(app, {
+    const { status, body } = await api<ApiErrorBody>({
       method: 'POST',
       url: `/api/conversations/${antiga}/reopen`,
     });

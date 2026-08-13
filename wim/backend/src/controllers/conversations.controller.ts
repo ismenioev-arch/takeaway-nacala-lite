@@ -7,6 +7,7 @@
  */
 import type { FastifyInstance } from 'fastify';
 import { actorFromRequest } from '../auth/actor.js';
+import { requireAuth } from '../middleware/authenticate.js';
 import { idParamSchema } from '../validators/common.validators.js';
 import {
   attentionQuerySchema,
@@ -16,13 +17,14 @@ import {
 import * as conversationsService from '../services/conversations.service.js';
 
 export function registerConversationRoutes(app: FastifyInstance): void {
-  app.get('/api/conversations', async (request) => {
+  const auth = { preHandler: requireAuth };
+  app.get('/api/conversations', auth, async (request) => {
     const query = listConversationsQuerySchema.parse(request.query);
     return conversationsService.listConversations(query);
   });
 
   /** A área mais importante do painel (secção 10). */
-  app.get('/api/conversations/attention', async (request) => {
+  app.get('/api/conversations/attention', auth, async (request) => {
     const { limit } = attentionQuerySchema.parse(request.query);
     const items = await conversationsService.listAttention(limit);
 
@@ -30,28 +32,28 @@ export function registerConversationRoutes(app: FastifyInstance): void {
   });
 
   /** Os cartões do painel principal (secção 9). */
-  app.get('/api/conversations/counts', async () => {
+  app.get('/api/conversations/counts', auth, async () => {
     return conversationsService.getCounts();
   });
 
-  app.get('/api/conversations/:id', async (request) => {
+  app.get('/api/conversations/:id', auth, async (request) => {
     const { id } = idParamSchema.parse(request.params);
     return conversationsService.getConversation(id);
   });
 
-  app.patch('/api/conversations/:id', async (request) => {
+  app.patch('/api/conversations/:id', auth, async (request) => {
     const { id } = idParamSchema.parse(request.params);
     const input = updateConversationSchema.parse(request.body);
 
     return conversationsService.updateConversation(id, input, actorFromRequest(request));
   });
 
-  app.post('/api/conversations/:id/resolve', async (request) => {
+  app.post('/api/conversations/:id/resolve', auth, async (request) => {
     const { id } = idParamSchema.parse(request.params);
     return conversationsService.resolveConversation(id, actorFromRequest(request));
   });
 
-  app.post('/api/conversations/:id/reopen', async (request) => {
+  app.post('/api/conversations/:id/reopen', auth, async (request) => {
     const { id } = idParamSchema.parse(request.params);
     return conversationsService.reopenConversation(id, actorFromRequest(request));
   });

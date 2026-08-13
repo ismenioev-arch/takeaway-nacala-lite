@@ -7,13 +7,22 @@ import { closePool, getPool } from '../../src/database/pool.js';
 import type { ContactDto } from '../../src/dtos/contact.dto.js';
 import type { Paginated } from '../../src/dtos/common.dto.js';
 import { freshSchema } from '../helpers/fixtures.js';
-import { call, query, startTestApp, type ApiErrorBody } from '../helpers/api.js';
+import {
+  authenticateAs,
+  query,
+  startTestApp,
+  type ApiErrorBody,
+  type AuthenticatedClient,
+} from '../helpers/api.js';
 
 let app: FastifyInstance;
+/** Cliente com sessão iniciada: a partir da FASE 4 a API exige-a. */
+let api: AuthenticatedClient['call'];
 
 beforeAll(async () => {
   await freshSchema();
   app = await startTestApp();
+  api = (await authenticateAs(app, { role: 'OWNER' })).call;
 });
 
 afterAll(async () => {
@@ -23,7 +32,7 @@ afterAll(async () => {
 
 describe('POST /api/contacts', () => {
   it('cria um contacto e devolve 201', async () => {
-    const { status, body } = await call<ContactDto>(app, {
+    const { status, body } = await api<ContactDto>({
       method: 'POST',
       url: '/api/contacts',
       payload: {
@@ -53,7 +62,7 @@ describe('POST /api/contacts', () => {
   });
 
   it('recusa um telefone fora do formato internacional', async () => {
-    const { status, body } = await call<ApiErrorBody>(app, {
+    const { status, body } = await api<ApiErrorBody>({
       method: 'POST',
       url: '/api/contacts',
       payload: { phone: '840001111' },
@@ -66,7 +75,7 @@ describe('POST /api/contacts', () => {
   });
 
   it('recusa um contacto repetido com 409, não com erro de base de dados', async () => {
-    const { status, body } = await call<ApiErrorBody>(app, {
+    const { status, body } = await api<ApiErrorBody>({
       method: 'POST',
       url: '/api/contacts',
       payload: { phone: '+258840001111' },
@@ -78,7 +87,7 @@ describe('POST /api/contacts', () => {
   });
 
   it('recusa uma categoria inventada', async () => {
-    const { status } = await call(app, {
+    const { status } = await api({
       method: 'POST',
       url: '/api/contacts',
       payload: { phone: '+258840009999', category: 'VIP' },
@@ -95,7 +104,7 @@ describe('GET /api/contacts', () => {
       ['+258840003333', 'Cimentos Exemplo', 'FORNECEDOR'],
       ['+258840004444', 'Carlos Bila', 'CLIENTE'],
     ] as const) {
-      await call(app, {
+      await api({
         method: 'POST',
         url: '/api/contacts',
         payload: { phone, displayName: name, category },
@@ -104,7 +113,7 @@ describe('GET /api/contacts', () => {
   });
 
   it('devolve a lista com o envelope de paginação', async () => {
-    const { status, body } = await call<Paginated<ContactDto>>(app, {
+    const { status, body } = await api<Paginated<ContactDto>>({
       method: 'GET',
       url: '/api/contacts',
     });
@@ -122,7 +131,7 @@ describe('GET /api/contacts', () => {
   });
 
   it('pagina correctamente', async () => {
-    const { body } = await call<Paginated<ContactDto>>(app, {
+    const { body } = await api<Paginated<ContactDto>>({
       method: 'GET',
       url: `/api/contacts${query({ page: 1, pageSize: 2 })}`,
     });
@@ -131,7 +140,7 @@ describe('GET /api/contacts', () => {
     expect(body.pagination.totalPages).toBe(2);
     expect(body.pagination.hasNext).toBe(true);
 
-    const second = await call<Paginated<ContactDto>>(app, {
+    const second = await api<Paginated<ContactDto>>({
       method: 'GET',
       url: `/api/contacts${query({ page: 2, pageSize: 2 })}`,
     });
@@ -143,7 +152,7 @@ describe('GET /api/contacts', () => {
   });
 
   it('filtra por categoria', async () => {
-    const { body } = await call<Paginated<ContactDto>>(app, {
+    const { body } = await api<Paginated<ContactDto>>({
       method: 'GET',
       url: `/api/contacts${query({ category: 'CLIENTE' })}`,
     });
@@ -153,7 +162,7 @@ describe('GET /api/contacts', () => {
   });
 
   it('aceita várias categorias no mesmo pedido', async () => {
-    const { body } = await call<Paginated<ContactDto>>(app, {
+    const { body } = await api<Paginated<ContactDto>>({
       method: 'GET',
       url: `/api/contacts${query({ category: ['CLIENTE', 'FORNECEDOR'] })}`,
     });
@@ -162,7 +171,7 @@ describe('GET /api/contacts', () => {
   });
 
   it('pesquisa por nome parcial', async () => {
-    const { body } = await call<Paginated<ContactDto>>(app, {
+    const { body } = await api<Paginated<ContactDto>>({
       method: 'GET',
       url: `/api/contacts${query({ q: 'sitoe' })}`,
     });
@@ -172,7 +181,7 @@ describe('GET /api/contacts', () => {
   });
 
   it('pesquisa por telefone parcial', async () => {
-    const { body } = await call<Paginated<ContactDto>>(app, {
+    const { body } = await api<Paginated<ContactDto>>({
       method: 'GET',
       url: `/api/contacts${query({ q: '840003333' })}`,
     });
@@ -181,7 +190,7 @@ describe('GET /api/contacts', () => {
   });
 
   it('recusa uma pesquisa demasiado curta', async () => {
-    const { status } = await call(app, {
+    const { status } = await api({
       method: 'GET',
       url: `/api/contacts${query({ q: 'a' })}`,
     });
@@ -190,7 +199,7 @@ describe('GET /api/contacts', () => {
   });
 
   it('recusa um pageSize acima do limite', async () => {
-    const { status, body } = await call<ApiErrorBody>(app, {
+    const { status, body } = await api<ApiErrorBody>({
       method: 'GET',
       url: `/api/contacts${query({ pageSize: 5000 })}`,
     });
@@ -201,7 +210,7 @@ describe('GET /api/contacts', () => {
 
   it('recusa uma coluna de ordenação não permitida', async () => {
     // Impede que a ordenação seja usada como via de injecção de SQL.
-    const { status } = await call(app, {
+    const { status } = await api({
       method: 'GET',
       url: `/api/contacts${query({ sortBy: 'password_hash' })}`,
     });
@@ -210,7 +219,7 @@ describe('GET /api/contacts', () => {
   });
 
   it('ordena por nome ascendente', async () => {
-    const { body } = await call<Paginated<ContactDto>>(app, {
+    const { body } = await api<Paginated<ContactDto>>({
       method: 'GET',
       url: `/api/contacts${query({ sortBy: 'name', sortDirection: 'asc' })}`,
     });
@@ -222,7 +231,7 @@ describe('GET /api/contacts', () => {
 
 describe('GET /api/contacts/:id', () => {
   it('devolve 404 para um identificador inexistente', async () => {
-    const { status, body } = await call<ApiErrorBody>(app, {
+    const { status, body } = await api<ApiErrorBody>({
       method: 'GET',
       url: '/api/contacts/00000000-0000-4000-8000-000000000000',
     });
@@ -232,7 +241,7 @@ describe('GET /api/contacts/:id', () => {
   });
 
   it('devolve 400 quando o identificador não é um UUID', async () => {
-    const { status, body } = await call<ApiErrorBody>(app, {
+    const { status, body } = await api<ApiErrorBody>({
       method: 'GET',
       url: '/api/contacts/nao-e-uuid',
     });
@@ -246,7 +255,7 @@ describe('PATCH /api/contacts/:id', () => {
   let contactId: string;
 
   beforeAll(async () => {
-    const { body } = await call<ContactDto>(app, {
+    const { body } = await api<ContactDto>({
       method: 'POST',
       url: '/api/contacts',
       payload: { phone: '+258840005555', displayName: 'Nome Inicial' },
@@ -255,7 +264,7 @@ describe('PATCH /api/contacts/:id', () => {
   });
 
   it('actualiza apenas os campos indicados', async () => {
-    const { status, body } = await call<ContactDto>(app, {
+    const { status, body } = await api<ContactDto>({
       method: 'PATCH',
       url: `/api/contacts/${contactId}`,
       payload: { displayName: 'Nome Corrigido', category: 'CLIENTE' },
@@ -282,7 +291,7 @@ describe('PATCH /api/contacts/:id', () => {
   it('não regista auditoria quando nada muda', async () => {
     const before = await getPool().query(`SELECT count(*) FROM audit_logs`);
 
-    await call(app, {
+    await api({
       method: 'PATCH',
       url: `/api/contacts/${contactId}`,
       payload: { displayName: 'Nome Corrigido' },
@@ -293,7 +302,7 @@ describe('PATCH /api/contacts/:id', () => {
   });
 
   it('recusa um PATCH vazio', async () => {
-    const { status } = await call(app, {
+    const { status } = await api({
       method: 'PATCH',
       url: `/api/contacts/${contactId}`,
       payload: {},
@@ -305,13 +314,13 @@ describe('PATCH /api/contacts/:id', () => {
   it('ignora campos que não são actualizáveis', async () => {
     // Enviar `phone` ou `waId` não deve alterá-los: são a identidade do
     // contacto e mudá-los partiria a ligação ao WhatsApp.
-    await call(app, {
+    await api({
       method: 'PATCH',
       url: `/api/contacts/${contactId}`,
       payload: { displayName: 'Outro Nome', phone: '+351999999999', waId: 'hackeado' },
     });
 
-    const { body } = await call<ContactDto>(app, {
+    const { body } = await api<ContactDto>({
       method: 'GET',
       url: `/api/contacts/${contactId}`,
     });
@@ -323,20 +332,20 @@ describe('PATCH /api/contacts/:id', () => {
 
 describe('DELETE /api/contacts/:id', () => {
   it('apaga e devolve 204', async () => {
-    const created = await call<ContactDto>(app, {
+    const created = await api<ContactDto>({
       method: 'POST',
       url: '/api/contacts',
       payload: { phone: '+258840006666' },
     });
 
-    const { status } = await call(app, {
+    const { status } = await api({
       method: 'DELETE',
       url: `/api/contacts/${created.body.id}`,
     });
 
     expect(status).toBe(204);
 
-    const after = await call(app, {
+    const after = await api({
       method: 'GET',
       url: `/api/contacts/${created.body.id}`,
     });
@@ -352,7 +361,7 @@ describe('DELETE /api/contacts/:id', () => {
   });
 
   it('devolve 404 ao apagar algo que não existe', async () => {
-    const { status } = await call(app, {
+    const { status } = await api({
       method: 'DELETE',
       url: '/api/contacts/00000000-0000-4000-8000-000000000000',
     });

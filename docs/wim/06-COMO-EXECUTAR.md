@@ -2,14 +2,16 @@
 
 Guia passo a passo. Escrito para quem não programa: siga pela ordem.
 
-> **Estado:** FASE 3 concluída. O sistema arranca, o modelo de dados está
-> criado e testado, e a API REST de contactos, conversas, mensagens e pesquisa
-> funciona. Ainda **não** tem autenticação (FASE 4) nem recebe mensagens do
-> WhatsApp (fases 6 a 8).
+> **Estado:** FASE 4 concluída. O sistema arranca, o modelo de dados está
+> criado e testado, a API funciona e **exige sessão iniciada**. Ainda não
+> recebe mensagens do WhatsApp (fases 6 a 8) e o painel ainda não tem ecrã de
+> entrada (FASE 5).
 >
-> ⚠️ **Sem autenticação, não coloque isto acessível na Internet.**
+> ⚠️ Em produção, coloque sempre atrás de HTTPS — ver a lista final de
+> [`05-SEGURANCA.md`](./05-SEGURANCA.md).
 >
-> Ver [`01-BASE-DE-DADOS.md`](./01-BASE-DE-DADOS.md) e [`02-API.md`](./02-API.md).
+> Ver também [`01-BASE-DE-DADOS.md`](./01-BASE-DE-DADOS.md) e
+> [`02-API.md`](./02-API.md).
 
 ---
 
@@ -85,11 +87,14 @@ de propósito: nenhum teste consegue apagar dados reais.
 ```bash
 cd wim/backend
 npm install
-cp .env.example .env
+npm run setup:env
 ```
 
-Para desenvolvimento local, o `.env` já funciona como está — a única linha
-que importa nesta fase é:
+O `npm run setup:env` cria o ficheiro `.env` e **gera os segredos de sessão**
+automaticamente. Sem eles o servidor não arranca — são o que assina as
+sessões dos utilizadores.
+
+Se a sua base de dados não for a predefinida, ajuste esta linha no `.env`:
 
 ```
 DATABASE_URL=postgresql://wim:wim_dev_password@localhost:5432/wim
@@ -104,15 +109,22 @@ npm run migrate
 Deve ver:
 
 ```
-Aplicadas 2 migração(ões):
+Aplicadas 3 migração(ões):
   ✔ 001_initial.sql
   ✔ 002_core_domain.sql
+  ✔ 003_auth.sql
 ```
 
 Opcional — inserir dados de exemplo para ver o sistema com conteúdo:
 
 ```bash
 npm run seed
+```
+
+Criar o seu utilizador (o primeiro fica proprietário do sistema):
+
+```bash
+npm run create-user
 ```
 
 Arrancar o servidor:
@@ -125,8 +137,6 @@ Confirmar noutro terminal:
 
 ```bash
 curl http://localhost:3001/api/health
-curl 'http://localhost:3001/api/contacts?pageSize=3'
-curl 'http://localhost:3001/api/search?q=cimentos'
 ```
 
 Resposta esperada:
@@ -137,6 +147,18 @@ Resposta esperada:
   "service": "wim-backend",
   "database": { "connected": true, "serverVersion": "PostgreSQL 16.13" }
 }
+```
+
+Os restantes endpoints exigem sessão. Para experimentar, entre com o
+utilizador que criou:
+
+```bash
+TOKEN=$(curl -s -X POST http://localhost:3001/api/auth/login \
+  -H 'content-type: application/json' \
+  -d '{"email":"SEU-EMAIL","password":"SUA-PASSWORD"}' \
+  | python3 -c 'import sys,json;print(json.load(sys.stdin)["accessToken"])')
+
+curl -H "Authorization: Bearer $TOKEN" 'http://localhost:3001/api/contacts?pageSize=3'
 ```
 
 ### Passo 3 — Painel
@@ -167,6 +189,8 @@ Abra <http://localhost:5173>. Deve ver **«Servidor: Ligado»** a verde.
 | `npm run migrate` | Aplica as migrações pendentes |
 | `npm run migrate:status` | Mostra o que está aplicado e o que falta |
 | `npm run seed` | Insere dados de exemplo (recusa correr em produção) |
+| `npm run setup:env` | Cria o `.env` com os segredos de sessão gerados |
+| `npm run create-user` | Cria um utilizador do painel |
 
 ### Painel (`wim/frontend`)
 
@@ -197,6 +221,23 @@ pg_isready
 sudo systemctl start postgresql
 ```
 
+### «É necessário iniciar sessão» (401)
+
+É o comportamento correcto desde a FASE 4: a API exige sessão. Entre com
+`POST /api/auth/login` e envie o token no cabeçalho `Authorization`.
+Ver [`05-SEGURANCA.md`](./05-SEGURANCA.md).
+
+### «Demasiadas tentativas falhadas» (429)
+
+Protecção contra quem tenta adivinhar passwords: 8 falhas na mesma conta em
+15 minutos bloqueiam a entrada. Espere, ou — se a equipa toda sai pelo mesmo
+IP — suba `LOGIN_RATE_LIMIT_MAX` no `.env`.
+
+### Esqueci-me da password
+
+Não há recuperação por e-mail. Peça a outro administrador que crie uma conta
+nova, ou crie-a no servidor com `npm run create-user`.
+
 ### O painel mostra «Sem ligação»
 
 O backend não está a correr. Volte ao Passo 2 e confirme que
@@ -218,6 +259,8 @@ nome termine em `_test`, para nunca apagarem dados reais. Confirme que a base
 2. **Não editar uma migração já aplicada.** Crie uma nova (`002_...`). O
    sistema detecta alterações e avisa, mas é melhor não chegar aí.
 3. **Não apontar os testes para a base de dados real.**
+4. **Não expor o sistema sem HTTPS.** Sem TLS, os tokens de sessão viajam em
+   claro e qualquer pessoa na mesma rede os pode copiar.
 
 ---
 
@@ -227,8 +270,8 @@ nome termine em `_test`, para nunca apagarem dados reais. Confirme que a base
 |---|---|
 | ~~2~~ | ~~Tabelas de contactos, conversas, mensagens, análises e rascunhos~~ ✔ |
 | ~~3~~ | ~~API base (contactos, conversas, mensagens, pesquisa)~~ ✔ |
-| 4 | Login e permissões |
-| 5 | Painel com dados a sério |
+| ~~4~~ | ~~Login e permissões~~ ✔ |
+| 5 | Painel com dados a sério, e ecrã de entrada |
 | 6 | Webhook do WhatsApp |
 | 7 | Recepção e armazenamento de mensagens |
 | 8 | Análise pela IA (Claude) |

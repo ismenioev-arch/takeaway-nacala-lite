@@ -9,6 +9,7 @@
  */
 import type { FastifyInstance } from 'fastify';
 import { actorFromRequest } from '../auth/actor.js';
+import { authenticated, requireAuth } from '../middleware/authenticate.js';
 import { idParamSchema } from '../validators/common.validators.js';
 import {
   createContactSchema,
@@ -18,34 +19,41 @@ import {
 import * as contactsService from '../services/contacts.service.js';
 
 export function registerContactRoutes(app: FastifyInstance): void {
-  app.get('/api/contacts', async (request) => {
+  // Todas as rotas exigem sessão iniciada (secção 25).
+  const auth = { preHandler: requireAuth };
+  app.get('/api/contacts', auth, async (request) => {
     const query = listContactsQuerySchema.parse(request.query);
     return contactsService.listContacts(query);
   });
 
-  app.get('/api/contacts/:id', async (request) => {
+  app.get('/api/contacts/:id', auth, async (request) => {
     const { id } = idParamSchema.parse(request.params);
     return contactsService.getContact(id);
   });
 
-  app.post('/api/contacts', async (request, reply) => {
+  app.post('/api/contacts', auth, async (request, reply) => {
     const input = createContactSchema.parse(request.body);
     const contact = await contactsService.createContact(input, actorFromRequest(request));
 
     return reply.status(201).send(contact);
   });
 
-  app.patch('/api/contacts/:id', async (request) => {
+  app.patch('/api/contacts/:id', auth, async (request) => {
     const { id } = idParamSchema.parse(request.params);
     const input = updateContactSchema.parse(request.body);
 
     return contactsService.updateContact(id, input, actorFromRequest(request));
   });
 
-  app.delete('/api/contacts/:id', async (request, reply) => {
-    const { id } = idParamSchema.parse(request.params);
-    await contactsService.deleteContact(id, actorFromRequest(request));
+    // Apagar um contacto apaga em cascata todo o seu histórico: exige ADMIN.
+  app.delete(
+    '/api/contacts/:id',
+    { preHandler: authenticated('ADMIN') },
+    async (request, reply) => {
+      const { id } = idParamSchema.parse(request.params);
+      await contactsService.deleteContact(id, actorFromRequest(request));
 
-    return reply.status(204).send();
-  });
+      return reply.status(204).send();
+    },
+  );
 }

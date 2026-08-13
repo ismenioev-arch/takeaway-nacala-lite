@@ -41,7 +41,11 @@ describe('migrações', () => {
   it('aplica as migrações pendentes, por ordem', async () => {
     const result = await migrateUp();
 
-    expect(result.applied).toEqual(['001_initial.sql', '002_core_domain.sql']);
+    expect(result.applied).toEqual([
+      '001_initial.sql',
+      '002_core_domain.sql',
+      '003_auth.sql',
+    ]);
     expect(await tableExists('schema_migrations')).toBe(true);
   });
 
