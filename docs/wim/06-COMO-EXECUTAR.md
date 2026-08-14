@@ -2,10 +2,10 @@
 
 Guia passo a passo. Escrito para quem não programa: siga pela ordem.
 
-> **Estado:** FASE 5 concluída. O sistema arranca, o modelo de dados está
-> criado e testado, a API funciona com autenticação, o painel tem ecrã de
-> entrada, protecção de rotas e dados em tempo real. Ainda não
-> recebe mensagens do WhatsApp (fases 6 a 8).
+> **Estado:** FASES 6-7 concluídas. O sistema recebe mensagens do WhatsApp
+> via webhook (HMAC validado, idempotente), e analisa cada mensagem com Claude
+> (intent, priority, urgency, recommended actions). O painel mostra análises
+> em tempo real. Próximas: geração de rascunhos automáticos (FASE 8).
 >
 > ⚠️ Em produção, coloque sempre atrás de HTTPS — ver a lista final de
 > [`05-SEGURANCA.md`](./05-SEGURANCA.md).
@@ -99,6 +99,25 @@ Se a sua base de dados não for a predefinida, ajuste esta linha no `.env`:
 ```
 DATABASE_URL=postgresql://wim:wim_dev_password@localhost:5432/wim
 ```
+
+Para receber mensagens do WhatsApp (FASE 6) e análise de IA (FASE 7), adicione
+ao `.env`:
+
+```
+# WhatsApp Webhook (FASE 6)
+WHATSAPP_VERIFY_TOKEN=seu_token_aleatorio_aqui
+WHATSAPP_APP_SECRET=seu_app_secret_da_meta
+WHATSAPP_PHONE_NUMBER_ID=seu_phone_number_id
+WHATSAPP_BUSINESS_ACCOUNT_ID=seu_business_account_id
+
+# Claude para análise de mensagens (FASE 7)
+ANTHROPIC_API_KEY=sk-ant-...
+ANTHROPIC_MODEL=claude-opus-5
+AI_EFFORT=medium
+AI_CONFIDENCE_THRESHOLD=0.9
+```
+
+Ver detalhes em [`06-FASE6-WEBHOOK.md`](./06-FASE6-WEBHOOK.md).
 
 Criar as tabelas:
 
@@ -284,7 +303,8 @@ nome termine em `_test`, para nunca apagarem dados reais. Confirme que a base
 | ~~3~~ | ~~API base (contactos, conversas, mensagens, pesquisa)~~ ✔ |
 | ~~4~~ | ~~Login e permissões~~ ✔ |
 | ~~5~~ | ~~Painel com dados a sério, ecrã de entrada e navegação~~ ✔ |
-| 6 | Webhook do WhatsApp |
-| 7 | Recepção e armazenamento de mensagens |
-| 8 | Análise pela IA (Claude) |
-| 9+ | Urgência, sugestões, aprovação, envio, notificações, follow-ups, testes, deploy |
+| ~~6~~ | ~~Webhook do WhatsApp com validação HMAC e idempotência~~ ✔ |
+| ~~7~~ | ~~Análise de mensagens com Claude (intent, priority, urgency, actions)~~ ✔ |
+| 8 | Geração de rascunhos automáticos com aprovação |
+| 9 | Envio de mensagens ao WhatsApp |
+| 10+ | Notificações, follow-ups, automações avançadas, testes, deploy |
