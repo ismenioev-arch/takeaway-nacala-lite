@@ -11,6 +11,7 @@ import * as contactsRepo from '../repositories/contacts.repository.js';
 import * as conversationsRepo from '../repositories/conversations.repository.js';
 import * as messagesRepo from '../repositories/messages.repository.js';
 import * as webhookEventsRepo from '../repositories/webhook-events.repository.js';
+import * as aiAnalysisService from './ai-analysis.service.js';
 import type { WebhookEvent, WebhookContact, WebhookMessage } from '../validators/whatsapp.validators.js';
 
 /**
@@ -127,7 +128,7 @@ async function processMessage(
   // Se a mensagem já existe, a INSERT falha com UNIQUE constraint
   // Mas como já verificámos webhook_events, isto não deve acontecer
   try {
-    await messagesRepo.insertMessage({
+    const messageId = await messagesRepo.insertMessage({
       conversationId,
       contactId,
       direction: 'INBOUND',
@@ -141,6 +142,12 @@ async function processMessage(
 
     // Incrementar contador de não lidas
     await conversationsRepo.incrementUnreadCount(conversationId, 1);
+
+    // Analisar com IA em background (não bloqueia a resposta)
+    // Deixar a IA registar seus próprios erros se falhar
+    aiAnalysisService.analyzeInboundMessage(messageId).catch((error) => {
+      console.error('Erro em análise de IA:', error);
+    });
   } catch (error) {
     // Se a mensagem já existe (duplicado mínimo), ignorar
     const errorMsg = error instanceof Error ? error.message : '';

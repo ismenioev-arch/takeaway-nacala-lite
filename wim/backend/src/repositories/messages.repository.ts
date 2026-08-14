@@ -148,13 +148,14 @@ export interface InsertMessageInput {
 export async function insertMessage(
   input: InsertMessageInput,
   db: Queryable = getPool(),
-): Promise<void> {
-  await db.query(
+): Promise<string> {
+  const result = await db.query<{ id: string }>(
     `INSERT INTO messages
        (conversation_id, contact_id, direction, wa_message_id, type, body,
         caption, media_id, media_mime, media_sha256, status, sent_by_user_id,
         wa_timestamp, error_code, error_detail, raw)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)`,
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+     RETURNING id`,
     [
       input.conversationId,
       input.contactId,
@@ -174,4 +175,6 @@ export async function insertMessage(
       input.raw ? JSON.stringify(input.raw) : null,
     ],
   );
+
+  return result.rows[0]!.id;
 }
