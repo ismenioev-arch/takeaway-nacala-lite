@@ -1,0 +1,78 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# WIM — ambiente completo com um comando.
+#
+#   cd wim/docker
+#   cp .env.example .env      # e preencha os valores
+#   docker compose up --build
+#
+# Painel:   http://localhost:8080
+# API:      http://localhost:3001/api/health
+#
+# ⚠  Nenhum segredo está escrito neste ficheiro. Tudo vem do `.env` ao lado,
+#    que está no .gitignore (especificação, secções 14 e 25).
+# ─────────────────────────────────────────────────────────────────────────────
+
+name: wim
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-wim}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?defina POSTGRES_PASSWORD no ficheiro .env}
+      POSTGRES_DB: ${POSTGRES_DB:-wim}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      # Só acessível a partir desta máquina, nunca da rede.
+      - '127.0.0.1:5432:5432'
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-wim} -d ${POSTGRES_DB:-wim}']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.backend
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: 3001
+      HOST: 0.0.0.0
+      DATABASE_URL: postgresql://${POSTGRES_USER:-wim}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-wim}
+      APP_BASE_URL: ${APP_BASE_URL:-http://localhost:8080}
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:8080}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET}
+      WHATSAPP_APP_SECRET: ${WHATSAPP_APP_SECRET}
+      WHATSAPP_VERIFY_TOKEN: ${WHATSAPP_VERIFY_TOKEN}
+      WHATSAPP_ACCESS_TOKEN: ${WHATSAPP_ACCESS_TOKEN}
+      WHATSAPP_PHONE_NUMBER_ID: ${WHATSAPP_PHONE_NUMBER_ID}
+      WHATSAPP_BUSINESS_ACCOUNT_ID: ${WHATSAPP_BUSINESS_ACCOUNT_ID}
+      WHATSAPP_API_VERSION: ${WHATSAPP_API_VERSION:-v21.0}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-claude-opus-5}
+      AI_EFFORT: ${AI_EFFORT:-medium}
+      AI_CONFIDENCE_THRESHOLD: ${AI_CONFIDENCE_THRESHOLD:-0.9}
+    ports:
+      - '127.0.0.1:3001:3001'
+
+  frontend:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - '8080:80'
+
+volumes:
+  postgres_data:
