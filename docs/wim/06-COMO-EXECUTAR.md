@@ -2,10 +2,10 @@
 
 Guia passo a passo. Escrito para quem não programa: siga pela ordem.
 
-> **Estado:** FASE 4 concluída. O sistema arranca, o modelo de dados está
-> criado e testado, a API funciona e **exige sessão iniciada**. Ainda não
-> recebe mensagens do WhatsApp (fases 6 a 8) e o painel ainda não tem ecrã de
-> entrada (FASE 5).
+> **Estado:** FASE 5 concluída. O sistema arranca, o modelo de dados está
+> criado e testado, a API funciona com autenticação, o painel tem ecrã de
+> entrada, protecção de rotas e dados em tempo real. Ainda não
+> recebe mensagens do WhatsApp (fases 6 a 8).
 >
 > ⚠️ Em produção, coloque sempre atrás de HTTPS — ver a lista final de
 > [`05-SEGURANCA.md`](./05-SEGURANCA.md).
@@ -171,7 +171,18 @@ npm install
 npm run dev
 ```
 
-Abra <http://localhost:5173>. Deve ver **«Servidor: Ligado»** a verde.
+Abra <http://localhost:5173>. Será redireccionado para `/login`.
+
+**Entrar:**
+1. Use as credenciais do utilizador que criou no Passo 2
+2. Se não criou ainda, execute `npm run create-user` no terminal do backend
+
+**Após login, verá:**
+- **Dashboard:** Cartões com números reais (urgentes, importantes, etc)
+- **Atenção:** Conversas que precisam de intervenção
+- **Conversas:** Listagem com filtros e paginação
+- **Clientes:** Cadastro (vazio — chegará com mensagens do WhatsApp)
+- **Definições:** Informações do utilizador e logout
 
 ---
 
@@ -199,6 +210,7 @@ Abra <http://localhost:5173>. Deve ver **«Servidor: Ligado»** a verde.
 | `npm run dev` | Arranca o painel em desenvolvimento |
 | `npm run build` | Gera a versão final para publicar |
 | `npm run preview` | Vê a versão final localmente |
+| `npm run typecheck` | Verifica tipos TypeScript |
 
 ---
 
@@ -271,7 +283,8 @@ nome termine em `_test`, para nunca apagarem dados reais. Confirme que a base
 | ~~2~~ | ~~Tabelas de contactos, conversas, mensagens, análises e rascunhos~~ ✔ |
 | ~~3~~ | ~~API base (contactos, conversas, mensagens, pesquisa)~~ ✔ |
 | ~~4~~ | ~~Login e permissões~~ ✔ |
-| 5 | Painel com dados a sério, e ecrã de entrada |
+| ~~5~~ | ~~Painel com dados a sério, ecrã de entrada e navegação~~ ✔ |
 | 6 | Webhook do WhatsApp |
 | 7 | Recepção e armazenamento de mensagens |
 | 8 | Análise pela IA (Claude) |
+| 9+ | Urgência, sugestões, aprovação, envio, notificações, follow-ups, testes, deploy |

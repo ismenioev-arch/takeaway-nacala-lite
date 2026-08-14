@@ -1,14 +1,6 @@
-import { NavLink, Outlet } from 'react-router-dom';
+import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { BackendStatus } from '@/components/BackendStatus';
-
-/**
- * Estrutura principal do painel, pensada primeiro para telemóvel
- * (especificação, secção 29): navegação em barra inferior no telemóvel,
- * barra lateral no computador.
- *
- * Na FASE 1 os separadores ainda não têm ecrãs por trás — ficam visíveis mas
- * desactivados, para que a forma final do painel seja clara desde já.
- */
+import { useAuth } from '@/hooks/useAuth';
 
 interface NavItem {
   label: string;
@@ -19,10 +11,10 @@ interface NavItem {
 
 const NAV_ITEMS: NavItem[] = [
   { label: 'Painel', to: '/', icon: '▦', enabled: true },
-  { label: 'Atenção', to: '/atencao', icon: '◉', enabled: false },
-  { label: 'Conversas', to: '/conversas', icon: '✉', enabled: false },
-  { label: 'Clientes', to: '/clientes', icon: '☺', enabled: false },
-  { label: 'Definições', to: '/definicoes', icon: '⚙', enabled: false },
+  { label: 'Atenção', to: '/atencao', icon: '◉', enabled: true },
+  { label: 'Conversas', to: '/conversas', icon: '✉', enabled: true },
+  { label: 'Clientes', to: '/clientes', icon: '☺', enabled: true },
+  { label: 'Definições', to: '/definicoes', icon: '⚙', enabled: true },
 ];
 
 function NavItems({ orientation }: { orientation: 'bottom' | 'side' }) {
@@ -73,6 +65,18 @@ function NavItems({ orientation }: { orientation: 'bottom' | 'side' }) {
 }
 
 export function AppLayout() {
+  const navigate = useNavigate();
+  const { session, logout } = useAuth();
+
+  const handleLogout = async () => {
+    try {
+      await logout();
+      navigate('/login', { replace: true });
+    } catch (error) {
+      console.error('Erro ao fazer logout:', error);
+    }
+  };
+
   return (
     <div className="safe-area flex min-h-dvh flex-col md:flex-row">
       {/* Barra lateral — apenas em ecrãs grandes */}
@@ -86,8 +90,21 @@ export function AppLayout() {
           <NavItems orientation="side" />
         </nav>
 
-        <div className="mt-auto pt-4">
+        <div className="mt-auto space-y-3 border-t border-slate-200 pt-4">
           <BackendStatus compact />
+
+          {session && (
+            <div className="rounded-lg bg-slate-50 p-3 text-xs">
+              <p className="font-medium text-slate-900">{session.user.name}</p>
+              <p className="text-slate-600">{session.user.email}</p>
+              <button
+                onClick={handleLogout}
+                className="mt-2 w-full rounded text-left text-slate-600 hover:text-slate-900"
+              >
+                Sair
+              </button>
+            </div>
+          )}
         </div>
       </aside>
 
@@ -98,7 +115,18 @@ export function AppLayout() {
             <p className="text-base font-bold tracking-tight">WIM</p>
             <p className="text-[11px] text-slate-500">Gestor Inteligente de WhatsApp</p>
           </div>
-          <BackendStatus compact />
+          <div className="flex items-center gap-3">
+            <BackendStatus compact />
+            {session && (
+              <button
+                onClick={handleLogout}
+                className="text-xs text-slate-600 hover:text-slate-900"
+                title={session.user.email}
+              >
+                ⎋
+              </button>
+            )}
+          </div>
         </header>
 
         <main className="flex-1 p-4 pb-24 md:p-8 md:pb-8">

@@ -1,14 +1,5 @@
 import { BackendStatus } from '@/components/BackendStatus';
-
-/**
- * Painel principal (especificação, secções 9 e 28).
- *
- * Na FASE 1 os cartões existem mas ainda não têm dados — não há tabela de
- * mensagens até à FASE 2. Estão aqui com valor "—" de propósito: a ordem
- * visual das prioridades (urgente primeiro) é uma decisão de desenho que
- * queremos fixada desde já, e é mais honesto mostrar "sem dados" do que
- * inventar números.
- */
+import { useConversationCounts } from '@/hooks/useConversationCounts';
 
 interface PriorityCard {
   label: string;
@@ -16,6 +7,7 @@ interface PriorityCard {
   ring: string;
   text: string;
   background: string;
+  key: 'urgente' | 'importante' | 'acompanhar' | 'normal';
 }
 
 const PRIORITY_CARDS: PriorityCard[] = [
@@ -25,6 +17,7 @@ const PRIORITY_CARDS: PriorityCard[] = [
     ring: 'border-urgente-border',
     text: 'text-urgente',
     background: 'bg-urgente-soft',
+    key: 'urgente',
   },
   {
     label: 'Importantes',
@@ -32,6 +25,7 @@ const PRIORITY_CARDS: PriorityCard[] = [
     ring: 'border-importante-border',
     text: 'text-importante',
     background: 'bg-importante-soft',
+    key: 'importante',
   },
   {
     label: 'Acompanhar',
@@ -39,6 +33,7 @@ const PRIORITY_CARDS: PriorityCard[] = [
     ring: 'border-acompanhar-border',
     text: 'text-acompanhar',
     background: 'bg-acompanhar-soft',
+    key: 'acompanhar',
   },
   {
     label: 'Normais',
@@ -46,19 +41,26 @@ const PRIORITY_CARDS: PriorityCard[] = [
     ring: 'border-normal-border',
     text: 'text-normal',
     background: 'bg-normal-soft',
+    key: 'normal',
   },
 ];
 
-const SECONDARY_CARDS = ['Total de conversas', 'Não respondidas', 'A aguardar aprovação'];
-
 export function DashboardPage() {
+  const { data: counts, isLoading, error } = useConversationCounts();
+
+  const getCountValue = (key: string): string | number => {
+    if (isLoading) return '…';
+    if (error) return '!';
+    if (!counts) return '—';
+    return counts[key as keyof typeof counts] ?? '—';
+  };
+
   return (
     <div className="mx-auto flex max-w-5xl flex-col gap-6">
       <header>
         <h1 className="text-xl font-bold tracking-tight md:text-2xl">Painel</h1>
         <p className="mt-1 text-sm text-slate-500">
-          Fase 1 concluída: as fundações estão de pé. Os números aparecem quando as mensagens
-          começarem a chegar.
+          Fase 5: autenticação, dados reais, navegação.
         </p>
       </header>
 
@@ -79,7 +81,9 @@ export function DashboardPage() {
                 <span aria-hidden="true">{card.emoji}</span>
                 {card.label}
               </p>
-              <p className={`mt-1 text-2xl font-bold tabular-nums ${card.text}`}>—</p>
+              <p className={`mt-1 text-2xl font-bold tabular-nums ${card.text}`}>
+                {getCountValue(card.key)}
+              </p>
             </article>
           ))}
         </div>
@@ -91,28 +95,27 @@ export function DashboardPage() {
         </h2>
 
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-          {SECONDARY_CARDS.map((label) => (
-            <article key={label} className="rounded-xl border border-slate-200 bg-white p-4">
-              <p className="text-xs font-medium text-slate-600">{label}</p>
-              <p className="mt-1 text-2xl font-bold tabular-nums text-slate-900">—</p>
-            </article>
-          ))}
-        </div>
-      </section>
+          <article className="rounded-xl border border-slate-200 bg-white p-4">
+            <p className="text-xs font-medium text-slate-600">Total de conversas</p>
+            <p className="mt-1 text-2xl font-bold tabular-nums text-slate-900">
+              {getCountValue('total')}
+            </p>
+          </article>
 
-      <section className="rounded-xl border border-dashed border-slate-300 bg-white p-4">
-        <h2 className="text-sm font-semibold text-slate-700">A seguir</h2>
-        <ol className="mt-2 space-y-1 text-sm text-slate-600">
-          <li>
-            <strong>Fase 2</strong> — tabelas de contactos, conversas, mensagens e análises
-          </li>
-          <li>
-            <strong>Fase 3 e 4</strong> — API base e autenticação
-          </li>
-          <li>
-            <strong>Fase 6 e 7</strong> — webhook do WhatsApp e recepção de mensagens
-          </li>
-        </ol>
+          <article className="rounded-xl border border-slate-200 bg-white p-4">
+            <p className="text-xs font-medium text-slate-600">Não respondidas</p>
+            <p className="mt-1 text-2xl font-bold tabular-nums text-slate-900">
+              {getCountValue('unanswered')}
+            </p>
+          </article>
+
+          <article className="rounded-xl border border-slate-200 bg-white p-4">
+            <p className="text-xs font-medium text-slate-600">A aguardar aprovação</p>
+            <p className="mt-1 text-2xl font-bold tabular-nums text-slate-900">
+              {getCountValue('awaitingApproval')}
+            </p>
+          </article>
+        </div>
       </section>
     </div>
   );
