@@ -364,3 +364,77 @@ export async function countConversations(
     resolved: toNumber(row['resolved']),
   };
 }
+
+/**
+ * Procura uma conversa aberta (não resolvida nem arquivada) para um contacto.
+ *
+ * Usado quando um webhook do WhatsApp chega: se já há uma conversa aberta,
+ * a nova mensagem continua nela. Se não, criamos uma nova.
+ */
+export async function findOpenByContactId(
+  contactId: string,
+  queryable?: Queryable,
+): Promise<ConversationRow | null> {
+  const pool = queryable ?? getPool();
+
+  const result = await pool.query<ConversationRow>(
+    `SELECT * FROM conversations
+     WHERE contact_id = $1
+       AND status NOT IN ('RESOLVED', 'ARCHIVED')
+     ORDER BY created_at DESC
+     LIMIT 1`,
+    [contactId],
+  );
+
+  return result.rows[0] ?? null;
+}
+
+/**
+ * Incrementa o contador de mensagens não lidas de uma conversa.
+ *
+ * Usado ao receber uma mensagem inbound do WhatsApp.
+ */
+export async function incrementUnreadCount(
+  conversationId: string,
+  amount: number = 1,
+  queryable?: Queryable,
+): Promise<void> {
+  const pool = queryable ?? getPool();
+
+  await pool.query(
+    `UPDATE conversations
+     SET unread_count = unread_count + $1,
+         last_inbound_at = now(),
+         last_message_at = now(),
+         updated_at = now()
+     WHERE id = $2`,
+    [amount, conversationId],
+  );
+}
+
+export interface InsertConversationInput {
+  contactId: string;
+  status?: ConversationStatus;
+  priority?: Priority;
+  subject?: string | null;
+}
+
+export async function insertConversation(
+  input: InsertConversationInput,
+  db: Queryable = getPool(),
+): Promise<ConversationRow> {
+  const result = await db.query<ConversationRow>(
+    `INSERT INTO conversations
+       (contact_id, status, priority, subject)
+     VALUES ($1, $2, $3, $4)
+     RETURNING *`,
+    [
+      input.contactId,
+      input.status ?? 'OPEN',
+      input.priority ?? 'NORMAL',
+      input.subject ?? null,
+    ],
+  );
+
+  return result.rows[0]!;
+}

@@ -6,7 +6,7 @@
  * (secção 11).
  */
 import type { MessageWithContextRow } from '../dtos/message.dto.js';
-import type { MessageDirection, MessageStatus } from '../models/enums.js';
+import type { MessageDirection, MessageStatus, MessageType } from '../models/enums.js';
 import { getPool, type Queryable } from '../database/pool.js';
 import { Conditions, likePattern } from './query-builder.js';
 import type { ListResult } from './contacts.repository.js';
@@ -124,4 +124,54 @@ export async function markConversationRead(
     [conversationId],
   );
   return result.rowCount ?? 0;
+}
+
+export interface InsertMessageInput {
+  conversationId: string;
+  contactId: string;
+  direction: MessageDirection;
+  waMessageId: string | null;
+  type: MessageType;
+  body: string | null;
+  caption?: string | null;
+  mediaId?: string | null;
+  mediaMime?: string | null;
+  mediaSha256?: string | null;
+  status: MessageStatus;
+  sentByUserId?: string | null;
+  waTimestamp: Date;
+  errorCode?: string | null;
+  errorDetail?: string | null;
+  raw?: unknown;
+}
+
+export async function insertMessage(
+  input: InsertMessageInput,
+  db: Queryable = getPool(),
+): Promise<void> {
+  await db.query(
+    `INSERT INTO messages
+       (conversation_id, contact_id, direction, wa_message_id, type, body,
+        caption, media_id, media_mime, media_sha256, status, sent_by_user_id,
+        wa_timestamp, error_code, error_detail, raw)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)`,
+    [
+      input.conversationId,
+      input.contactId,
+      input.direction,
+      input.waMessageId ?? null,
+      input.type,
+      input.body ?? null,
+      input.caption ?? null,
+      input.mediaId ?? null,
+      input.mediaMime ?? null,
+      input.mediaSha256 ?? null,
+      input.status,
+      input.sentByUserId ?? null,
+      input.waTimestamp,
+      input.errorCode ?? null,
+      input.errorDetail ?? null,
+      input.raw ? JSON.stringify(input.raw) : null,
+    ],
+  );
 }

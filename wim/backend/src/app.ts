@@ -20,6 +20,8 @@ import {
 } from './controllers/messages.controller.js';
 import { registerErrorHandler } from './middleware/errors.js';
 import { registerRawBodyParser } from './middleware/raw-body.js';
+import { registerWhatsAppWebhookValidation } from './middleware/whatsapp-webhook.js';
+import { registerWebhookRoutes } from './controllers/webhooks.controller.js';
 
 /** Converte "15m" / "1h" / "30d" em milissegundos. */
 export function durationToMs(value: string): number {
@@ -46,6 +48,9 @@ export async function buildApp(): Promise<FastifyInstance> {
   // O parser do corpo bruto tem de ser registado antes de qualquer rota.
   registerRawBodyParser(app);
 
+  // O middleware de validação de webhook tem de ser registado antes do rate limit.
+  registerWhatsAppWebhookValidation(app);
+
   await app.register(helmet, {
     // A API não serve HTML; o CSP por omissão do helmet só atrapalharia.
     contentSecurityPolicy: false,
@@ -69,6 +74,7 @@ export async function buildApp(): Promise<FastifyInstance> {
 
   registerHealthRoutes(app);
   registerAuthRoutes(app);
+  registerWebhookRoutes(app);
   registerContactRoutes(app);
   registerConversationRoutes(app);
   registerMessageRoutes(app);
