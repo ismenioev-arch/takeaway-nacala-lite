@@ -31,6 +31,10 @@ const baseSchema = z.object({
   HOST: z.string().default('0.0.0.0'),
   APP_BASE_URL: z.string().url().default('http://localhost:3001'),
   CORS_ORIGIN: z.string().default('http://localhost:5173'),
+  // Definida automaticamente pela Vercel ("1"). Não a escreva à mão: serve
+  // apenas para o código saber que está a correr numa função sem estado, onde
+  // o processo é congelado assim que a resposta sai.
+  VERCEL: z.string().optional(),
   // 'silent' desliga os logs por completo — usado pelos testes.
   LOG_LEVEL: z
     .enum(['silent', 'fatal', 'error', 'warn', 'info', 'debug', 'trace'])
@@ -68,43 +72,132 @@ const baseSchema = z.object({
   JWT_REFRESH_TTL: durationString.default('30d'),
 
   // ── WhatsApp Cloud API (usada a partir da FASE 6) ────────────────────────
+  // O interruptor que decide se a integração está em uso. Desligado, o
+  // sistema sobe sem credenciais da Meta e o webhook responde 503 — útil
+  // para pôr o painel no ar antes de ter a conta do WhatsApp Business
+  // aprovada. Ligado, as credenciais passam a ser obrigatórias.
+  WHATSAPP_ENABLED: z
+    .enum(['true', 'false'])
+    .default('false')
+    .transform((v) => v === 'true'),
   WHATSAPP_APP_SECRET: secret(16).optional(),
   WHATSAPP_VERIFY_TOKEN: secret(16).optional(),
   WHATSAPP_ACCESS_TOKEN: required.optional(),
   WHATSAPP_PHONE_NUMBER_ID: required.optional(),
   WHATSAPP_BUSINESS_ACCOUNT_ID: required.optional(),
   WHATSAPP_API_VERSION: z.string().regex(/^v\d+\.\d+$/, 'deve ter o formato vXX.Y').default('v21.0'),
+  /**
+   * Base da Graph API. Existe para a mesma coisa que `ANTHROPIC_BASE_URL`:
+   * apontar para um duplo local numa demonstração, ou para um proxy da
+   * empresa. Em condições normais não se toca.
+   */
+  WHATSAPP_GRAPH_URL: z.string().url().default('https://graph.facebook.com'),
+  WHATSAPP_TIMEOUT_MS: z.coerce.number().int().min(1000).max(60_000).default(15_000),
 
   // ── IA (usada a partir da FASE 8) ────────────────────────────────────────
+  // Mesmo princípio do WHATSAPP_ENABLED: desligada, não há análise
+  // automática e não é preciso chave da Anthropic.
+  AI_ENABLED: z
+    .enum(['true', 'false'])
+    .default('false')
+    .transform((v) => v === 'true'),
   ANTHROPIC_API_KEY: required.optional(),
   ANTHROPIC_MODEL: z.string().default('claude-opus-5'),
+  /**
+   * Para quem põe um gateway à frente da Anthropic (registo de custos,
+   * limites por equipa) ou um duplo local numa demonstração. Sem isto, a
+   * única forma de exercitar o cliente HTTP verdadeiro seria contra a
+   * Internet, com uma chave a sério.
+   */
+  ANTHROPIC_BASE_URL: z.string().url().default('https://api.anthropic.com'),
   AI_EFFORT: z.enum(['low', 'medium', 'high', 'xhigh', 'max']).default('medium'),
   AI_CONFIDENCE_THRESHOLD: z.coerce.number().min(0).max(1).default(0.9),
+
+  /** Quantas mensagens a fila processa por execução. Mantém a resposta curta. */
+  AI_BATCH_SIZE: z.coerce.number().int().min(1).max(50).default(5),
+  /** Tecto de tempo para uma chamada à Claude, em milissegundos. */
+  AI_TIMEOUT_MS: z.coerce.number().int().min(1000).max(120_000).default(45_000),
+  /**
+   * Quantas mensagens anteriores da conversa seguem no contexto.
+   *
+   * Poucas e a IA responde fora de contexto; muitas e paga-se por tokens
+   * que não mudam a classificação.
+   */
+  AI_HISTORY_LIMIT: z.coerce.number().int().min(0).max(50).default(10),
+
+  /**
+   * Segredo que autoriza quem dispara a fila de análise.
+   *
+   * A fila não tem sessão de utilizador: é chamada por um agendador (Vercel
+   * Cron ou outro). Sem segredo, qualquer pessoa na internet poderia obrigar
+   * o sistema a gastar chamadas à Claude.
+   */
+  CRON_SECRET: secret(16).optional(),
+
+  /**
+   * Num servidor permanente, processar a fila sozinho de X em X segundos.
+   *
+   * Não faz nada em serverless, onde não há processo entre pedidos.
+   */
+  AI_WORKER_ENABLED: z
+    .enum(['true', 'false'])
+    .default('false')
+    .transform((v) => v === 'true'),
+  AI_WORKER_INTERVAL_MS: z.coerce.number().int().min(1000).max(600_000).default(15_000),
 });
 
 /**
- * Em produção, o que é opcional em desenvolvimento passa a obrigatório.
- * Assim ninguém coloca o sistema em produção sem o segredo do webhook.
+ * Uma integração ligada tem de estar completa.
+ *
+ * A regra deixou de ser «em produção exige-se tudo» e passou a ser «exige-se
+ * o que está ligado». A diferença importa na prática: permite pôr o painel
+ * no ar, com utilizadores reais a consultar dados reais, enquanto a conta do
+ * WhatsApp Business ainda está em aprovação — sem nunca permitir o caso
+ * perigoso, que é ter o webhook aberto sem segredo para validar assinaturas.
+ *
+ * Fora de produção as credenciais continuam opcionais mesmo com a integração
+ * ligada, para que se possa correr o servidor local com metade preenchida.
  */
-const productionRequired = [
+const whatsappRequired = [
   'WHATSAPP_APP_SECRET',
   'WHATSAPP_VERIFY_TOKEN',
   'WHATSAPP_ACCESS_TOKEN',
   'WHATSAPP_PHONE_NUMBER_ID',
-  'ANTHROPIC_API_KEY',
 ] as const;
 
-const envSchema = baseSchema.superRefine((value, ctx) => {
-  if (value.NODE_ENV !== 'production') return;
+// O CRON_SECRET entra aqui pela mesma razão que o segredo do webhook: em
+// produção, um disparador de fila aberto ao mundo é um orçamento aberto ao
+// mundo.
+const aiRequired = ['ANTHROPIC_API_KEY', 'CRON_SECRET'] as const;
 
-  for (const key of productionRequired) {
-    if (!value[key]) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: [key],
-        message: 'é obrigatória quando NODE_ENV=production',
-      });
+const envSchema = baseSchema.superRefine((value, ctx) => {
+  if (value.NODE_ENV === 'production') {
+    const missing = [
+      ...(value.WHATSAPP_ENABLED ? whatsappRequired : []),
+      ...(value.AI_ENABLED ? aiRequired : []),
+    ];
+
+    for (const key of missing) {
+      if (!value[key]) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: [key],
+          message: 'é obrigatória quando NODE_ENV=production',
+        });
+      }
     }
+  }
+
+  // Esta verificação não depende do ambiente: um webhook público sem segredo
+  // para validar a assinatura aceitaria eventos forjados por qualquer pessoa.
+  if (value.WHATSAPP_ENABLED && !value.WHATSAPP_APP_SECRET) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['WHATSAPP_APP_SECRET'],
+      message:
+        'é obrigatória quando WHATSAPP_ENABLED=true — sem ela o webhook não consegue ' +
+        'distinguir um evento da Meta de um evento forjado',
+    });
   }
 
   if (value.JWT_ACCESS_SECRET && value.JWT_ACCESS_SECRET === value.JWT_REFRESH_SECRET) {
@@ -191,3 +284,21 @@ export function resetEnvCache(): void {
 
 export const isProduction = (env: Env = getEnv()): boolean => env.NODE_ENV === 'production';
 export const isTest = (env: Env = getEnv()): boolean => env.NODE_ENV === 'test';
+
+/**
+ * Integrações activas. Lidas aqui e não espalhadas por `if (env.X_ENABLED)`
+ * pelo código, para que a resposta à pergunta «isto está ligado?» tenha um
+ * único sítio onde mudar.
+ */
+export const isWhatsAppEnabled = (env: Env = getEnv()): boolean => env.WHATSAPP_ENABLED;
+export const isAiEnabled = (env: Env = getEnv()): boolean => env.AI_ENABLED;
+
+/**
+ * Estamos numa função sem estado (Vercel) em vez de um servidor permanente?
+ *
+ * Num servidor, trabalho lançado depois de responder continua a correr. Numa
+ * função, o processo é congelado assim que a resposta sai e esse trabalho
+ * desaparece a meio. Quem precisa de garantir que o trabalho termina tem de
+ * perguntar por aqui.
+ */
+export const isServerless = (env: Env = getEnv()): boolean => Boolean(env.VERCEL);

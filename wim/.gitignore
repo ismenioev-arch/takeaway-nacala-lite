@@ -3,6 +3,10 @@ dist/
 build/
 coverage/
 *.log
+*.tsbuildinfo
+
+# Vercel
+.vercel
 
 # Segredos — nunca commitar
 .env

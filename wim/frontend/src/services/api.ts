@@ -9,6 +9,19 @@ import type { ApiErrorBody } from '@/types/api';
 import type { HealthResponse } from '@/types/health';
 import type { AuthUser } from '@/types/auth';
 
+/**
+ * Onde vive a API.
+ *
+ * Por omissão, lado nenhum: os pedidos saem como `/api/...`, relativos à
+ * página. É isso que queremos em desenvolvimento (o Vite encaminha) e na
+ * Vercel (o painel e a API partilham o domínio) — sem CORS, sem URL
+ * diferente por ambiente, sem nada para configurar.
+ *
+ * `VITE_API_URL` existe para o caso contrário: API num domínio próprio. Aí é
+ * preciso acrescentar essa origem ao `CORS_ORIGIN` do backend.
+ */
+const API_BASE_URL = (import.meta.env.VITE_API_URL ?? '').replace(/\/+$/, '');
+
 /** Erro devolvido pela API, já traduzido para algo que a interface pode mostrar. */
 export class ApiError extends Error {
   readonly status: number;
@@ -40,7 +53,7 @@ async function request<T>(
   let response: Response;
 
   try {
-    response = await fetch(path, {
+    response = await fetch(`${API_BASE_URL}${path}`, {
       ...init,
       headers: { 'content-type': 'application/json', ...init?.headers },
     });
@@ -152,6 +165,45 @@ export interface ConversationSummaryDto {
   minutesSinceLastInbound: number | null;
 }
 
+export interface PendingDraftDto {
+  id: string;
+  conversationId: string;
+  messageId: string;
+  status: 'DRAFT' | 'EDITED' | 'APPROVED' | 'SENT' | 'CANCELLED' | 'FAILED';
+  automationLevel: 'AUTO' | 'DRAFT' | 'HUMAN_REQUIRED';
+  requiresApproval: boolean;
+
+  content: string;
+  editedContent: string | null;
+  effectiveContent: string;
+
+  contact: { id: string; name: string | null; phone: string };
+  inbound: { body: string | null; type: string; timestamp: string };
+  analysis: {
+    priority: 'URGENTE' | 'IMPORTANTE' | 'ACOMPANHAR' | 'NORMAL' | null;
+    intent: string | null;
+    confidence: number | null;
+    summary: string | null;
+    urgencyReason: string | null;
+    recommendedAction: string | null;
+  };
+  conversationPriority: 'URGENTE' | 'IMPORTANTE' | 'ACOMPANHAR' | 'NORMAL';
+  createdAt: string;
+}
+
+interface PendingDraftsResponse {
+  data: PendingDraftDto[];
+  /** Falso quando a integração com o WhatsApp está desligada. */
+  canSend: boolean;
+}
+
+interface SendDraftResponse {
+  status: string;
+  messageId: string;
+  waMessageId: string;
+  sentBy: { id: string; name: string };
+}
+
 interface ListResponse<T> {
   data: T[];
   pagination: {
@@ -217,5 +269,32 @@ export const api = {
         headers: makeHeaders(accessToken),
       });
     },
+  },
+
+  drafts: {
+    pending: (accessToken: string): Promise<PendingDraftsResponse> =>
+      request<PendingDraftsResponse>('/api/drafts', { headers: makeHeaders(accessToken) }),
+
+    /** Guarda a edição sem enviar. */
+    edit: (accessToken: string, id: string, content: string): Promise<PendingDraftDto> =>
+      request<PendingDraftDto>(`/api/drafts/${id}`, {
+        method: 'PATCH',
+        headers: makeHeaders(accessToken),
+        body: JSON.stringify({ content }),
+      }),
+
+    cancel: (accessToken: string, id: string): Promise<PendingDraftDto> =>
+      request<PendingDraftDto>(`/api/drafts/${id}/cancel`, {
+        method: 'POST',
+        headers: makeHeaders(accessToken),
+      }),
+
+    /** Aprova e envia. O `content` permite editar e enviar num só gesto. */
+    send: (accessToken: string, id: string, content?: string): Promise<SendDraftResponse> =>
+      request<SendDraftResponse>(`/api/drafts/${id}/send`, {
+        method: 'POST',
+        headers: makeHeaders(accessToken),
+        body: JSON.stringify(content === undefined ? {} : { content }),
+      }),
   },
 };

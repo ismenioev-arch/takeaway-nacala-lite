@@ -10,6 +10,7 @@
 import { EnvValidationError, getEnv } from './config/env.js';
 import { buildApp } from './app.js';
 import { checkDatabaseHealth, closePool } from './database/pool.js';
+import { startAnalysisWorker, stopAnalysisWorker } from './services/ai/worker.js';
 
 async function main(): Promise<void> {
   const env = getEnv();
@@ -30,12 +31,17 @@ async function main(): Promise<void> {
     'WIM backend pronto',
   );
 
+  // Num servidor permanente a fila de análise anda sozinha; em serverless
+  // esta chamada não faz nada e o trabalho vem de um agendador.
+  startAnalysisWorker();
+
   let shuttingDown = false;
   const shutdown = async (signal: string): Promise<void> => {
     if (shuttingDown) return;
     shuttingDown = true;
 
     app.log.info({ signal }, 'a encerrar');
+    stopAnalysisWorker();
     try {
       await app.close();
       await closePool();

@@ -85,7 +85,7 @@ const OrderDetailModal: React.FC<Props> = ({ order, open, onOpenChange, onStatus
       
       // Fetch menu items for the order items
       const menuItemIds = itemsData?.map(i => i.menu_item_id).filter(Boolean) || [];
-      let menuItemsMap: Record<string, { name: string; image_url: string | null }> = {};
+      const menuItemsMap: Record<string, { name: string; image_url: string | null }> = {};
       
       if (menuItemIds.length > 0) {
         const { data: menuData } = await supabase

@@ -38,3 +38,34 @@ export function createLogger(): FastifyBaseLogger {
     timestamp: pino.stdTimeFunctions.isoTime,
   });
 }
+
+/**
+ * Um logger para quem não tem um pedido à mão.
+ *
+ * Os controladores usam `request.log`, que já traz o identificador do
+ * pedido. Mas o worker da fila e os serviços chamados por ele correm fora
+ * de qualquer pedido, e escrever para `console` perderia a estrutura e a
+ * lista de campos censurados.
+ *
+ * A criação é adiada até à primeira utilização, de propósito: construir o
+ * pino no carregamento do módulo leria a configuração antes de os testes
+ * terem oportunidade de a definir.
+ */
+let shared: FastifyBaseLogger | undefined;
+
+function base(): FastifyBaseLogger {
+  shared ??= createLogger();
+  return shared;
+}
+
+export const logger = {
+  debug: (...args: Parameters<FastifyBaseLogger['debug']>) => base().debug(...args),
+  info: (...args: Parameters<FastifyBaseLogger['info']>) => base().info(...args),
+  warn: (...args: Parameters<FastifyBaseLogger['warn']>) => base().warn(...args),
+  error: (...args: Parameters<FastifyBaseLogger['error']>) => base().error(...args),
+};
+
+/** Apenas para testes: esquece o logger partilhado. */
+export function resetLoggerCache(): void {
+  shared = undefined;
+}

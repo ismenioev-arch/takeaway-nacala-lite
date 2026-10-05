@@ -17,7 +17,13 @@ As restantes escolhas da especificação mantêm-se: PostgreSQL, API REST,
 React + TypeScript no painel, Docker, Claude para a IA e a Meta WhatsApp
 Cloud API oficial.
 
-👉 Para pôr o sistema a correr: **[`06-COMO-EXECUTAR.md`](./06-COMO-EXECUTAR.md)**
+👉 Para pôr o sistema a correr localmente: **[`06-COMO-EXECUTAR.md`](./06-COMO-EXECUTAR.md)**
+👉 Para o pôr no ar (Vercel + Neon): **[`08-DEPLOY-VERCEL-NEON.md`](./08-DEPLOY-VERCEL-NEON.md)**
+👉 Como entram as mensagens do WhatsApp: **[`09-FASE6-WEBHOOK.md`](./09-FASE6-WEBHOOK.md)**
+
+👉 Como são analisadas e quem decide o que sai: **[`10-FASE8-IA.md`](./10-FASE8-IA.md)**
+
+👉 Como uma resposta aprovada chega ao cliente: **[`11-FASE11-ENVIO.md`](./11-FASE11-ENVIO.md)**
 
 ---
 

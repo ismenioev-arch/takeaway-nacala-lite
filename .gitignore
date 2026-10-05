@@ -22,8 +22,12 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+# Segredos e configuração local. O .env.example é a excepção: serve de
+# referência e não tem valores reais.
 .env
 .env.*
-VITE_SUPABASE_URL=
-VITE_SUPABASE_ANON_KEY=
+!.env.example
+
+# Vercel
+.vercel
 

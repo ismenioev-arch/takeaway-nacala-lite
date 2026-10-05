@@ -6,6 +6,7 @@
  * (secção 11).
  */
 import type { MessageWithContextRow } from '../dtos/message.dto.js';
+import type { MessageRow } from '../models/domain.js';
 import type { MessageDirection, MessageStatus, MessageType } from '../models/enums.js';
 import { getPool, type Queryable } from '../database/pool.js';
 import { Conditions, likePattern } from './query-builder.js';
@@ -173,5 +174,307 @@ export async function insertMessage(
       input.errorDetail ?? null,
       input.raw ? JSON.stringify(input.raw) : null,
     ],
+  );
+}
+
+/**
+ * Aplica uma actualização de estado vinda do WhatsApp (`sent`, `delivered`,
+ * `read`, `failed`) a uma mensagem que nós enviámos.
+ *
+ * Devolve `true` se alguma coisa mudou.
+ *
+ * **Nunca recua.** A Meta não garante a ordem de entrega das notificações:
+ * o `read` pode chegar antes do `delivered`. Sem esta protecção, uma
+ * mensagem já lida pelo cliente voltaria a aparecer como «entregue» — e o
+ * operador ficaria à espera de uma leitura que já aconteceu.
+ *
+ * `FAILED` é a excepção e aplica-se sempre: se a Meta diz que falhou, falhou,
+ * independentemente do que pensávamos antes.
+ */
+export async function applyDeliveryStatus(
+  input: {
+    waMessageId: string;
+    status: 'SENT' | 'DELIVERED' | 'READ' | 'FAILED';
+    errorCode?: string | null;
+    errorDetail?: string | null;
+  },
+  db: Queryable = getPool(),
+): Promise<boolean> {
+  // O esquema exige um motivo quando o estado é FAILED.
+  const errorCode = input.status === 'FAILED' ? (input.errorCode ?? 'UNKNOWN') : null;
+  const errorDetail = input.status === 'FAILED' ? (input.errorDetail ?? null) : null;
+
+  const rank = `CASE %s WHEN 'SENT' THEN 1 WHEN 'DELIVERED' THEN 2 WHEN 'READ' THEN 3 ELSE 0 END`;
+
+  const result = await db.query(
+    `UPDATE messages
+        SET status       = $2::message_status,
+            error_code   = COALESCE($3, error_code),
+            error_detail = COALESCE($4, error_detail)
+      WHERE wa_message_id = $1
+        AND direction = 'OUTBOUND'
+        AND (
+          $2 = 'FAILED'
+          OR ${rank.replace('%s', 'status::text')} < ${rank.replace('%s', '$2')}
+        )`,
+    [input.waMessageId, input.status, errorCode, errorDetail],
+  );
+
+  return (result.rowCount ?? 0) > 0;
+}
+
+export interface InsertInboundMessageInput {
+  conversationId: string;
+  contactId: string;
+  waMessageId: string;
+  type: MessageType;
+  body: string | null;
+  caption?: string | null;
+  mediaId?: string | null;
+  mediaMime?: string | null;
+  mediaSha256?: string | null;
+  waTimestamp: Date;
+  raw?: unknown;
+}
+
+/**
+ * Guarda uma mensagem recebida do WhatsApp. Devolve `false` se já lá estava.
+ *
+ * O `ON CONFLICT (wa_message_id) DO NOTHING` é a última linha de defesa
+ * contra duplicados — a primeira é a tabela `webhook_events`. Ter as duas
+ * não é exagero: a primeira protege contra o reenvio do mesmo evento, esta
+ * protege contra a mesma mensagem chegar por dois caminhos diferentes, e é
+ * a única que o PostgreSQL garante mesmo com dois processos em paralelo.
+ *
+ * Não lança quando a mensagem já existe, porque isso não é um erro: é a
+ * Meta a fazer exactamente o que prometeu fazer.
+ */
+export async function insertInboundMessage(
+  input: InsertInboundMessageInput,
+  db: Queryable = getPool(),
+): Promise<boolean> {
+  const result = await db.query(
+    `INSERT INTO messages
+       (conversation_id, contact_id, direction, wa_message_id, type, body,
+        caption, media_id, media_mime, media_sha256, status, wa_timestamp, raw)
+     VALUES ($1, $2, 'INBOUND', $3, $4, $5, $6, $7, $8, $9, 'RECEIVED', $10, $11)
+     ON CONFLICT (wa_message_id) DO NOTHING`,
+    [
+      input.conversationId,
+      input.contactId,
+      input.waMessageId,
+      input.type,
+      input.body,
+      input.caption ?? null,
+      input.mediaId ?? null,
+      input.mediaMime ?? null,
+      input.mediaSha256 ?? null,
+      input.waTimestamp,
+      input.raw ? JSON.stringify(input.raw) : null,
+    ],
+  );
+
+  return (result.rowCount ?? 0) > 0;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Fila de análise (FASE 8)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Reivindica uma mensagem para análise, ou devolve `null` se não houver.
+ *
+ * O `UPDATE ... WHERE status = 'RECEIVED' ... RETURNING` é a reivindicação:
+ * só um processo consegue mudar a linha, e é esse que fica com o trabalho.
+ * O `FOR UPDATE SKIP LOCKED` na subconsulta faz com que dois processos em
+ * paralelo apanhem mensagens diferentes em vez de ficarem à espera um do
+ * outro — que foi exactamente o impasse que derrubou a primeira versão do
+ * webhook.
+ *
+ * Mensagens presas em `ANALYZING` há mais de `staleAfterMinutes` voltam a
+ * ser elegíveis. Isto cobre o caso real em serverless: a função é congelada
+ * a meio da chamada à Claude e ninguém volta a tocar naquela linha. Sem
+ * isto, uma mensagem perdida ficava perdida para sempre.
+ */
+export async function claimMessageForAnalysis(
+  options: { staleAfterMinutes?: number } = {},
+  db: Queryable = getPool(),
+): Promise<MessageRow | null> {
+  const staleAfter = options.staleAfterMinutes ?? 10;
+
+  const result = await db.query<MessageRow>(
+    `UPDATE messages
+        SET status = 'ANALYZING'
+      WHERE id = (
+        SELECT id FROM messages
+         WHERE direction = 'INBOUND'
+           AND (
+             status = 'RECEIVED'
+             OR (status = 'ANALYZING' AND updated_at < now() - ($1 || ' minutes')::interval)
+           )
+         ORDER BY created_at
+         FOR UPDATE SKIP LOCKED
+         LIMIT 1
+      )
+      RETURNING *`,
+    [String(staleAfter)],
+  );
+
+  return result.rows[0] ?? null;
+}
+
+/** Devolve a mensagem à fila. Usado quando a falha é transitória. */
+export async function releaseMessageToQueue(
+  id: string,
+  db: Queryable = getPool(),
+): Promise<void> {
+  await db.query(`UPDATE messages SET status = 'RECEIVED' WHERE id = $1 AND status = 'ANALYZING'`, [
+    id,
+  ]);
+}
+
+/**
+ * Marca a mensagem como falhada, com motivo.
+ *
+ * Só para falhas que não melhoram sozinhas. Uma mensagem em `FAILED` sai da
+ * fila e passa a ser problema de uma pessoa — que é o comportamento certo
+ * quando o modelo devolveu algo que não conseguimos validar.
+ */
+export async function markMessageAnalysisFailed(
+  id: string,
+  errorCode: string,
+  errorDetail: string,
+  db: Queryable = getPool(),
+): Promise<void> {
+  await db.query(
+    `UPDATE messages
+        SET status = 'FAILED', error_code = $2, error_detail = $3
+      WHERE id = $1`,
+    [id, errorCode, errorDetail.slice(0, 2000)],
+  );
+}
+
+export async function setMessageStatus(
+  id: string,
+  status: MessageStatus,
+  db: Queryable = getPool(),
+): Promise<void> {
+  await db.query(`UPDATE messages SET status = $2::message_status WHERE id = $1`, [id, status]);
+}
+
+/**
+ * As últimas mensagens da conversa, da mais antiga para a mais recente.
+ *
+ * Ordena-se por data descendente para apanhar as N mais recentes e
+ * inverte-se depois: o modelo lê melhor uma conversa na ordem em que
+ * aconteceu.
+ */
+export async function listConversationHistory(
+  conversationId: string,
+  limit: number,
+  options: { excludeMessageId?: string } = {},
+  db: Queryable = getPool(),
+): Promise<MessageRow[]> {
+  if (limit <= 0) return [];
+
+  const result = await db.query<MessageRow>(
+    `SELECT * FROM messages
+      WHERE conversation_id = $1
+        AND ($3::uuid IS NULL OR id <> $3::uuid)
+      ORDER BY wa_timestamp DESC, created_at DESC
+      LIMIT $2`,
+    [conversationId, limit, options.excludeMessageId ?? null],
+  );
+
+  return result.rows.reverse();
+}
+
+export interface AnalysisQueueStats {
+  pending: number;
+  analyzing: number;
+  failed: number;
+}
+
+/** Quantas mensagens esperam, estão a ser analisadas, ou desistiram. */
+export async function getAnalysisQueueStats(
+  db: Queryable = getPool(),
+): Promise<AnalysisQueueStats> {
+  const result = await db.query<{ status: string; count: string }>(
+    `SELECT status::text AS status, count(*)::text AS count
+       FROM messages
+      WHERE direction = 'INBOUND'
+        AND status IN ('RECEIVED', 'ANALYZING', 'FAILED')
+      GROUP BY status`,
+  );
+
+  const byStatus = new Map(result.rows.map((row) => [row.status, Number(row.count)]));
+
+  return {
+    pending: byStatus.get('RECEIVED') ?? 0,
+    analyzing: byStatus.get('ANALYZING') ?? 0,
+    failed: byStatus.get('FAILED') ?? 0,
+  };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Envio (FASE 11)
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface InsertOutboundMessageInput {
+  conversationId: string;
+  contactId: string;
+  body: string;
+  sentByUserId: string;
+}
+
+/**
+ * Regista a resposta **antes** de a enviar à Meta.
+ *
+ * A ordem é deliberada e é a lição da FASE 6 aplicada ao contrário: entre
+ * gravar primeiro e enviar primeiro, grava-se primeiro. Se o processo
+ * morrer a meio, fica uma linha `APPROVED` sem `wa_message_id` — visível,
+ * estranha, investigável. Ao contrário: uma mensagem que chegou ao cliente
+ * e de que não há registo nenhum.
+ *
+ * `wa_message_id` fica NULL até a Meta confirmar, e o índice único da
+ * coluna aceita vários NULL precisamente para isto.
+ */
+export async function insertOutboundMessage(
+  input: InsertOutboundMessageInput,
+  db: Queryable = getPool(),
+): Promise<MessageRow> {
+  const result = await db.query<MessageRow>(
+    `INSERT INTO messages
+       (conversation_id, contact_id, direction, type, body, status, sent_by_user_id, wa_timestamp)
+     VALUES ($1, $2, 'OUTBOUND', 'text', $3, 'APPROVED', $4, now())
+     RETURNING *`,
+    [input.conversationId, input.contactId, input.body, input.sentByUserId],
+  );
+
+  return result.rows[0]!;
+}
+
+/** A Meta aceitou: fica o `wamid` que liga a nossa linha às deles. */
+export async function markOutboundSent(
+  id: string,
+  waMessageId: string,
+  db: Queryable = getPool(),
+): Promise<void> {
+  await db.query(
+    `UPDATE messages SET status = 'SENT', wa_message_id = $2, error_code = NULL, error_detail = NULL
+      WHERE id = $1`,
+    [id, waMessageId],
+  );
+}
+
+export async function markOutboundFailed(
+  id: string,
+  errorCode: string,
+  errorDetail: string,
+  db: Queryable = getPool(),
+): Promise<void> {
+  await db.query(
+    `UPDATE messages SET status = 'FAILED', error_code = $2, error_detail = $3 WHERE id = $1`,
+    [id, errorCode, errorDetail.slice(0, 2000)],
   );
 }

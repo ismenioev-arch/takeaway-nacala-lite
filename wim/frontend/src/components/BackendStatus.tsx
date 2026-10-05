@@ -45,16 +45,26 @@ export function BackendStatus({ compact = false }: { compact?: boolean }) {
             <dd className="font-medium">{data.database.latencyMs} ms</dd>
           </div>
           <div>
-            <dt className="text-slate-500">Activo há</dt>
-            <dd className="font-medium">{data.uptimeSeconds}s</dd>
+            {/* Em serverless o uptime do processo não diz nada de útil, por
+                isso o quarto lugar vale mais para o estado da integração —
+                a causa habitual de «não entram mensagens». */}
+            <dt className="text-slate-500">WhatsApp</dt>
+            <dd className="font-medium">{data.features.whatsapp ? 'Ligado' : 'Desligado'}</dd>
           </div>
         </dl>
       )}
 
       {isError && (
         <p className="mt-3 text-xs text-urgente">
-          {error instanceof Error ? error.message : 'Erro desconhecido.'} Verifique se o backend
-          está a correr em <code className="font-mono">http://localhost:3001</code>.
+          {error instanceof Error ? error.message : 'Erro desconhecido.'}{' '}
+          {import.meta.env.DEV ? (
+            <>
+              Verifique se o backend está a correr em{' '}
+              <code className="font-mono">http://localhost:3001</code>.
+            </>
+          ) : (
+            'Se o problema persistir, contacte o responsável pelo sistema.'
+          )}
         </p>
       )}
     </section>

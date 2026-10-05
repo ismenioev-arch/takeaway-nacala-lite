@@ -84,8 +84,11 @@ de propósito: nenhum teste consegue apagar dados reais.
 
 ### Passo 2 — Backend
 
+O `wim/` é um **workspace npm**: há um único `npm install`, feito na raiz do
+`wim/`, que instala as dependências do backend e do painel de uma vez.
+
 ```bash
-cd wim/backend
+cd wim
 npm install
 npm run setup:env
 ```
@@ -166,10 +169,12 @@ curl -H "Authorization: Bearer $TOKEN" 'http://localhost:3001/api/contacts?pageS
 Noutro terminal:
 
 ```bash
-cd wim/frontend
-npm install
-npm run dev
+cd wim
+npm run dev:frontend
 ```
+
+(Não é preciso instalar nada outra vez — o `npm install` do Passo 2 já
+tratou do painel.)
 
 Abra <http://localhost:5173>. Será redireccionado para `/login`.
 
@@ -187,6 +192,19 @@ Abra <http://localhost:5173>. Será redireccionado para `/login`.
 ---
 
 ## Comandos úteis
+
+### A partir da raiz do `wim/`
+
+Como é um workspace, a raiz tem atalhos para o que se usa todos os dias — é
+daqui que se corre tudo sem andar a saltar de pasta:
+
+| Comando | O que faz |
+|---|---|
+| `npm install` | Instala backend e painel de uma só vez |
+| `npm run dev:backend` / `npm run dev:frontend` | Arranca cada metade |
+| `npm test` | Corre a suite do backend |
+| `npm run typecheck` | Verifica tipos do backend, do painel e da função da Vercel |
+| `npm run migrate` · `npm run seed` · `npm run create-user` | O mesmo que no backend |
 
 ### Backend (`wim/backend`)
 

@@ -3,6 +3,7 @@ import { AppLayout } from '@/layouts/AppLayout';
 import { DashboardPage } from '@/pages/DashboardPage';
 import { LoginPage } from '@/pages/LoginPage';
 import { AttentionPage } from '@/pages/AttentionPage';
+import { ApprovalsPage } from '@/pages/ApprovalsPage';
 import { ConversationsPage } from '@/pages/ConversationsPage';
 import { ClientsPage } from '@/pages/ClientsPage';
 import { SettingsPage } from '@/pages/SettingsPage';
@@ -22,6 +23,7 @@ export function App() {
       >
         <Route path="/" element={<DashboardPage />} />
         <Route path="/atencao" element={<AttentionPage />} />
+        <Route path="/aprovacoes" element={<ApprovalsPage />} />
         <Route path="/conversas" element={<ConversationsPage />} />
         <Route path="/clientes" element={<ClientsPage />} />
         <Route path="/definicoes" element={<SettingsPage />} />

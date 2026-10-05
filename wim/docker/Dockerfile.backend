@@ -2,33 +2,46 @@
 # ─────────────────────────────────────────────────────────────────────────────
 # WIM — backend
 # Contexto de build: a pasta `wim/` (precisa de backend/ e database/).
+#
+# O `wim/` é um workspace npm: existe um único package-lock.json, na raiz, e
+# as dependências ficam em /app/node_modules. Por isso copiamos sempre os
+# dois package.json (backend e frontend) antes do `npm ci` — sem eles o npm
+# recusa-se a resolver o lockfile, mesmo quando só queremos um workspace.
 # ─────────────────────────────────────────────────────────────────────────────
 
 FROM node:22-alpine AS deps
-WORKDIR /app/backend
-COPY backend/package.json backend/package-lock.json ./
-RUN npm ci
+WORKDIR /app
+COPY package.json package-lock.json ./
+COPY backend/package.json backend/
+COPY frontend/package.json frontend/
+RUN npm ci --workspace @wim/backend --include-workspace-root
 
 FROM node:22-alpine AS build
-WORKDIR /app/backend
-COPY --from=deps /app/backend/node_modules ./node_modules
-COPY backend/ ./
-RUN npm run build
+WORKDIR /app
+COPY --from=deps /app/node_modules ./node_modules
+COPY package.json package-lock.json ./
+COPY backend/ ./backend/
+RUN npm run build --workspace @wim/backend
 
 FROM node:22-alpine AS runtime
 ENV NODE_ENV=production
-WORKDIR /app/backend
+WORKDIR /app
 
 # Só as dependências de produção: imagem menor, menos superfície de ataque.
-COPY backend/package.json backend/package-lock.json ./
-RUN npm ci --omit=dev && npm cache clean --force
+COPY package.json package-lock.json ./
+COPY backend/package.json backend/
+COPY frontend/package.json frontend/
+RUN npm ci --omit=dev --workspace @wim/backend --include-workspace-root \
+  && npm cache clean --force
 
-COPY --from=build /app/backend/dist ./dist
+COPY --from=build /app/backend/dist ./backend/dist
 # As migrações vivem fora do backend e são precisas em runtime.
-COPY database/ /app/database/
+COPY database/ ./database/
 
 # Nunca correr como root.
 USER node
+
+WORKDIR /app/backend
 
 EXPOSE 3001
 
