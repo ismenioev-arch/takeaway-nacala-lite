@@ -306,15 +306,19 @@ Três armadilhas conhecidas, e como o código lida com cada uma.
 
 ### 7.1 Trabalho depois da resposta desaparece
 
-Num servidor, responder primeiro e processar depois é a melhor escolha: a
-Meta recebe o `200 OK` em milissegundos. Numa função, o processo é congelado
-assim que a resposta sai — e o processamento morre a meio, sem erro e sem
-nova tentativa, porque a Meta já considerou o evento entregue.
+A tentação é responder `200 OK` à Meta e processar a seguir, para ficar
+muito abaixo do limite de cinco segundos. Numa função, isso perde mensagens:
+o processo é congelado no instante em que a resposta sai e o trabalho
+pendente morre a meio — sem erro e sem nova tentativa, porque a Meta já
+considerou o evento entregue.
 
-O webhook detecta onde está a correr (a Vercel define `VERCEL=1`) e, em
-serverless, **espera** que a mensagem fique guardada antes de responder. Se
-falhar, devolve 500 para a Meta tentar de novo; a idempotência por
-`wa_message_id` garante que a repetição não duplica nada.
+Por isso o webhook **espera** que o lote fique guardado antes de responder.
+São algumas escritas na base de dados, dezenas de milissegundos. Se falhar,
+devolve 500 e a Meta reenvia; a idempotência garante que o reenvio não
+duplica nada.
+
+Quando a análise pela IA entrar (FASE 8) — essa sim, lenta — o caminho certo
+é uma fila de trabalho, e não voltar às promessas soltas.
 
 ### 7.2 Demasiadas ligações à base de dados
 
@@ -367,6 +371,8 @@ Aplique a migração **antes** de publicar o código que depende dela.
 |---|---|---|
 | Deploy falha: *Configuração inválida* | falta uma variável de ambiente | a mensagem lista exactamente quais; os logs da função mostram-na |
 | `/api/health` → `"connected": false` | `DATABASE_URL` errado, ou base adormecida | confirme o URL `-pooler`; tente de novo passados 10 s |
+| Webhook devolve 401 | `WHATSAPP_APP_SECRET` não é o da app na Meta | Meta → Definições → Básico → Chave Secreta da App |
+| Mensagens não aparecem no painel, webhook devolve 200 | payload com forma inesperada | logs da função: procure «formato inesperado», com o corpo recebido |
 | Tudo devolve 404 | *Root Directory* não está em `wim` | Settings → General → Root Directory |
 | Painel abre mas o login falha com erro de rede | a função não arrancou | Vercel → Deployments → Functions → logs |
 | Login devolve 401 com a password certa | o utilizador foi criado noutra base de dados | volte a correr `npm run create-user` com o `DATABASE_URL` de produção |

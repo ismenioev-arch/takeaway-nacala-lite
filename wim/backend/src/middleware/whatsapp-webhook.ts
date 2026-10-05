@@ -67,7 +67,7 @@ export function validateWhatsAppSignature(
  * Compara duas strings com proteção contra timing attacks.
  * Lê todos os bytes mesmo que não coincidam.
  */
-function compareTimingSafe(a: string, b: string): boolean {
+export function compareTimingSafe(a: string, b: string): boolean {
   if (a.length !== b.length) {
     return false;
   }

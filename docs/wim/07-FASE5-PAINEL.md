@@ -288,15 +288,10 @@ na Vercel com base de dados no Neon, com as integrações do WhatsApp e da IA
 desligadas por configuração. Ver
 [`08-DEPLOY-VERCEL-NEON.md`](./08-DEPLOY-VERCEL-NEON.md).
 
-**FASE 6 — Webhook do WhatsApp:**
-- Receber mensagens em tempo real
-- Armazenar no banco
-- Atualizar dashboard instantaneamente (via SSE ou polling melhorado)
-
-**FASE 7 — Recepção de Mensagens:**
-- Consumir webhook do WhatsApp Business Cloud API
-- Armazenar conversas e mensagens
-- Idempotência via `wa_message_id`
+**FASES 6 e 7 — Webhook e recepção de mensagens: concluídas.**
+O sistema recebe mensagens reais da Meta, com assinatura validada,
+idempotência em duas camadas e suporte a todos os tipos de mensagem. Ver
+[`09-FASE6-WEBHOOK.md`](./09-FASE6-WEBHOOK.md).
 
 **FASE 8 — Análise pela IA:**
 - Integrar Claude API

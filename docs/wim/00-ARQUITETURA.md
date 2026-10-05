@@ -19,6 +19,7 @@ Cloud API oficial.
 
 👉 Para pôr o sistema a correr localmente: **[`06-COMO-EXECUTAR.md`](./06-COMO-EXECUTAR.md)**
 👉 Para o pôr no ar (Vercel + Neon): **[`08-DEPLOY-VERCEL-NEON.md`](./08-DEPLOY-VERCEL-NEON.md)**
+👉 Como entram as mensagens do WhatsApp: **[`09-FASE6-WEBHOOK.md`](./09-FASE6-WEBHOOK.md)**
 
 ---
 
