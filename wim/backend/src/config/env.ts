@@ -86,6 +86,13 @@ const baseSchema = z.object({
   WHATSAPP_PHONE_NUMBER_ID: required.optional(),
   WHATSAPP_BUSINESS_ACCOUNT_ID: required.optional(),
   WHATSAPP_API_VERSION: z.string().regex(/^v\d+\.\d+$/, 'deve ter o formato vXX.Y').default('v21.0'),
+  /**
+   * Base da Graph API. Existe para a mesma coisa que `ANTHROPIC_BASE_URL`:
+   * apontar para um duplo local numa demonstração, ou para um proxy da
+   * empresa. Em condições normais não se toca.
+   */
+  WHATSAPP_GRAPH_URL: z.string().url().default('https://graph.facebook.com'),
+  WHATSAPP_TIMEOUT_MS: z.coerce.number().int().min(1000).max(60_000).default(15_000),
 
   // ── IA (usada a partir da FASE 8) ────────────────────────────────────────
   // Mesmo princípio do WHATSAPP_ENABLED: desligada, não há análise

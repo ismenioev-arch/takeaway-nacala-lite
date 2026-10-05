@@ -12,6 +12,7 @@ import { getEnv } from './config/env.js';
 import { createLogger } from './config/logger.js';
 import { registerAiRoutes } from './controllers/ai.controller.js';
 import { registerAuthRoutes } from './controllers/auth.controller.js';
+import { registerDraftRoutes } from './controllers/drafts.controller.js';
 import { registerContactRoutes } from './controllers/contacts.controller.js';
 import { registerConversationRoutes } from './controllers/conversations.controller.js';
 import { registerHealthRoutes } from './controllers/health.controller.js';
@@ -81,6 +82,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   registerMessageRoutes(app);
   registerSearchRoutes(app);
   registerAiRoutes(app);
+  registerDraftRoutes(app);
 
   return app;
 }

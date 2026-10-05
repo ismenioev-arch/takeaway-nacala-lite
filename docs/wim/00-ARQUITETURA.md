@@ -23,6 +23,8 @@ Cloud API oficial.
 
 👉 Como são analisadas e quem decide o que sai: **[`10-FASE8-IA.md`](./10-FASE8-IA.md)**
 
+👉 Como uma resposta aprovada chega ao cliente: **[`11-FASE11-ENVIO.md`](./11-FASE11-ENVIO.md)**
+
 ---
 
 ## 1. Análise da situação actual

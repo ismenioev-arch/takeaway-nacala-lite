@@ -51,6 +51,17 @@ export class AppError extends Error {
   static serviceUnavailable(message: string, details?: unknown): AppError {
     return new AppError(503, 'SERVICE_UNAVAILABLE', message, details);
   }
+
+  /**
+   * Nós estamos bem; quem está mal é o serviço de que dependemos.
+   *
+   * Distinto do 503: ali a coisa pode passar sozinha, aqui a Meta recusou
+   * o pedido e repetir dá o mesmo. A diferença é visível para quem está no
+   * painel — «tente daqui a pouco» contra «é preciso resolver isto».
+   */
+  static badGateway(message: string, details?: unknown): AppError {
+    return new AppError(502, 'BAD_GATEWAY', message, details);
+  }
 }
 
 export interface ErrorResponseBody {

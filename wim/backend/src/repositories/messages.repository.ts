@@ -415,3 +415,66 @@ export async function getAnalysisQueueStats(
     failed: byStatus.get('FAILED') ?? 0,
   };
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Envio (FASE 11)
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface InsertOutboundMessageInput {
+  conversationId: string;
+  contactId: string;
+  body: string;
+  sentByUserId: string;
+}
+
+/**
+ * Regista a resposta **antes** de a enviar à Meta.
+ *
+ * A ordem é deliberada e é a lição da FASE 6 aplicada ao contrário: entre
+ * gravar primeiro e enviar primeiro, grava-se primeiro. Se o processo
+ * morrer a meio, fica uma linha `APPROVED` sem `wa_message_id` — visível,
+ * estranha, investigável. Ao contrário: uma mensagem que chegou ao cliente
+ * e de que não há registo nenhum.
+ *
+ * `wa_message_id` fica NULL até a Meta confirmar, e o índice único da
+ * coluna aceita vários NULL precisamente para isto.
+ */
+export async function insertOutboundMessage(
+  input: InsertOutboundMessageInput,
+  db: Queryable = getPool(),
+): Promise<MessageRow> {
+  const result = await db.query<MessageRow>(
+    `INSERT INTO messages
+       (conversation_id, contact_id, direction, type, body, status, sent_by_user_id, wa_timestamp)
+     VALUES ($1, $2, 'OUTBOUND', 'text', $3, 'APPROVED', $4, now())
+     RETURNING *`,
+    [input.conversationId, input.contactId, input.body, input.sentByUserId],
+  );
+
+  return result.rows[0]!;
+}
+
+/** A Meta aceitou: fica o `wamid` que liga a nossa linha às deles. */
+export async function markOutboundSent(
+  id: string,
+  waMessageId: string,
+  db: Queryable = getPool(),
+): Promise<void> {
+  await db.query(
+    `UPDATE messages SET status = 'SENT', wa_message_id = $2, error_code = NULL, error_detail = NULL
+      WHERE id = $1`,
+    [id, waMessageId],
+  );
+}
+
+export async function markOutboundFailed(
+  id: string,
+  errorCode: string,
+  errorDetail: string,
+  db: Queryable = getPool(),
+): Promise<void> {
+  await db.query(
+    `UPDATE messages SET status = 'FAILED', error_code = $2, error_detail = $3 WHERE id = $1`,
+    [id, errorCode, errorDetail.slice(0, 2000)],
+  );
+}

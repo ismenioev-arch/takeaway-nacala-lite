@@ -12,6 +12,7 @@ interface NavItem {
 const NAV_ITEMS: NavItem[] = [
   { label: 'Painel', to: '/', icon: '▦', enabled: true },
   { label: 'Atenção', to: '/atencao', icon: '◉', enabled: true },
+  { label: 'Aprovar', to: '/aprovacoes', icon: '✓', enabled: true },
   { label: 'Conversas', to: '/conversas', icon: '✉', enabled: true },
   { label: 'Clientes', to: '/clientes', icon: '☺', enabled: true },
   { label: 'Definições', to: '/definicoes', icon: '⚙', enabled: true },

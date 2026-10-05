@@ -276,10 +276,53 @@ do cliente. As acções de autenticação (`auth.login`, `auth.login_failed`,
 
 ---
 
+## 6b. Aprovações e envio (`/api/drafts`)
+
+A única porta por onde uma resposta chega ao cliente. Todas as rotas exigem
+sessão: a fila de análise tem um caminho alternativo com segredo partilhado,
+esta não tem, porque é uma decisão de pessoa e não trabalho de máquina.
+
+| Método | Rota | O que faz |
+|---|---|---|
+| `GET` | `/api/drafts` | Fila de aprovações, as conversas mais graves primeiro. Devolve também `canSend`. |
+| `GET` | `/api/drafts/:id` | Um rascunho com a mensagem do cliente e a análise. |
+| `PATCH` | `/api/drafts/:id` | Guarda uma edição (`content`) sem enviar. |
+| `POST` | `/api/drafts/:id/cancel` | Descarta o rascunho. |
+| `POST` | `/api/drafts/:id/send` | Aprova e envia. Aceita `content` para editar e enviar num gesto. |
+
+O texto da IA fica sempre em `content` e nunca é alterado; a edição humana
+vai para `edited_content`. Assim continua a ser possível, meses depois,
+comparar o que a IA propôs com o que a empresa realmente disse.
+
+**A sequência de um envio** são três transacções, por esta ordem:
+
+1. aprovar o rascunho e **registar a mensagem de saída** — commit;
+2. falar com a Meta;
+3. registar o resultado.
+
+Gravar antes de enviar parece a ordem errada e é a certa. Se o processo
+morrer entre 2 e 3, fica uma linha `APPROVED` sem `wa_message_id`: visível,
+estranha, investigável. A ordem inversa deixaria uma mensagem no telemóvel
+do cliente de que não há registo nenhum — e isso ninguém descobre.
+
+**Erros.** `409` quando o rascunho já foi decidido (inclui o segundo clique
+e os cliques simultâneos, travados por `SELECT ... FOR UPDATE`). `503`
+quando a falha é passageira e vale a pena tentar outra vez, ou quando a
+integração está desligada. `502` quando a Meta recusou e repetir dá o
+mesmo. Em qualquer falha de envio a mensagem fica `FAILED` com o motivo e
+nasce uma notificação `SEND_FAILED`.
+
+Cada operação escreve em `audit_logs`: `draft.edited`, `draft.cancelled`,
+`draft.approved`, `draft.sent`, `draft.send_failed`. A pergunta «quem
+autorizou esta resposta ao cliente?» tem sempre resposta.
+
+---
+
 ## 7. O que ainda não existe
 
-- Sem envio de mensagens: `POST /api/messages/send` e a aprovação de rascunhos
-  dependem do WhatsAppService (fases 6 e 11).
+- Sem promoção automática dos rascunhos de nível `AUTO` — mesmo esses
+  esperam hoje por aprovação humana.
+- Sem `POST /api/messages/send` para mensagens fora de um rascunho.
 - Sem endpoints de definições, métricas, notificações e follow-ups.
 - Sem tempo real (SSE) — o painel faz sondagem por agora.
 

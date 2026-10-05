@@ -38,6 +38,14 @@ export const AUDIT_ACTIONS = {
   // que é que esta resposta saiu sozinha?» tenha sempre resposta.
   analysisCompleted: 'ai.analysis_completed',
   analysisFailed: 'ai.analysis_failed',
+
+  // Rascunhos (secções 3 e 8). Estas quatro são as mais importantes da
+  // tabela: respondem a «quem autorizou esta resposta ao cliente?».
+  draftEdited: 'draft.edited',
+  draftCancelled: 'draft.cancelled',
+  draftApproved: 'draft.approved',
+  draftSent: 'draft.sent',
+  draftSendFailed: 'draft.send_failed',
 } as const;
 
 export type AuditAction = (typeof AUDIT_ACTIONS)[keyof typeof AUDIT_ACTIONS];
