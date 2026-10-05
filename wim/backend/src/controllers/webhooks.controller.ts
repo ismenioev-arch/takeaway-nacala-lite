@@ -9,11 +9,30 @@
  */
 import type { FastifyInstance } from 'fastify';
 import { AppError } from '../middleware/errors.js';
-import { getEnv } from '../config/env.js';
+import { getEnv, isServerless, isWhatsAppEnabled } from '../config/env.js';
 import { webhookVerifySchema, webhookEventSchema } from '../validators/whatsapp.validators.js';
 import * as whatsappService from '../services/whatsapp.service.js';
 
 export function registerWebhookRoutes(app: FastifyInstance): void {
+  /**
+   * Enquanto a integração estiver desligada (`WHATSAPP_ENABLED=false`), as
+   * duas rotas existem mas recusam-se a trabalhar.
+   *
+   * Responder 503 e não 404 é deliberado: 404 diria à Meta «este URL não
+   * existe», o que levaria alguém a procurar um erro de configuração que não
+   * existe. 503 diz a verdade — o endereço está certo, a funcionalidade é
+   * que ainda não foi ligada.
+   */
+  app.addHook('onRequest', async (request) => {
+    if (!request.url.startsWith('/api/webhooks/whatsapp')) return;
+    if (isWhatsAppEnabled()) return;
+
+    throw AppError.serviceUnavailable(
+      'A integração com o WhatsApp está desligada neste ambiente. ' +
+        'Defina WHATSAPP_ENABLED=true e as credenciais da Meta para a activar.',
+    );
+  });
+
   /**
    * GET /api/webhooks/whatsapp
    *
@@ -66,10 +85,31 @@ export function registerWebhookRoutes(app: FastifyInstance): void {
       return reply.status(200).send({ ok: true });
     }
 
-    // Processar em background (não esperar que termine)
-    // Respondemos imediatamente com 200
-    processWebhookInBackground(eventData.data).catch((error) => {
-      request.log.error('Erro ao processar webhook:', error);
+    // Num servidor permanente, responder primeiro e processar depois é a
+    // melhor escolha: a Meta recebe o 200 em milissegundos e o trabalho
+    // continua à vontade.
+    //
+    // Numa função sem estado isso perde mensagens. A Vercel congela o
+    // processo no instante em que a resposta sai, e tudo o que ficou a meio
+    // morre aí — sem erro, sem aviso, sem nova tentativa (porque já
+    // respondemos 200 e a Meta considera o evento entregue). Por isso, em
+    // serverless, esperamos.
+    if (isServerless()) {
+      try {
+        await processWebhookInBackground(eventData.data);
+      } catch (error) {
+        // Devolver 500 faz a Meta tentar de novo (até 7 vezes), que é o que
+        // queremos: o evento ainda não foi guardado. A idempotência por
+        // `wa_message_id` garante que a repetição não duplica nada.
+        request.log.error({ err: error }, 'Erro ao processar webhook');
+        return reply.status(500).send({ ok: false });
+      }
+
+      return reply.status(200).send({ ok: true });
+    }
+
+    processWebhookInBackground(eventData.data).catch((error: unknown) => {
+      request.log.error({ err: error }, 'Erro ao processar webhook');
     });
 
     return reply.status(200).send({ ok: true });

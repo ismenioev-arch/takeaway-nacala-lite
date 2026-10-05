@@ -5,6 +5,11 @@ export interface HealthResponse {
   version: string;
   uptimeSeconds: number;
   timestamp: string;
+  environment: 'development' | 'test' | 'production';
+  features: {
+    whatsapp: boolean;
+    ai: boolean;
+  };
   database: {
     connected: boolean;
     latencyMs: number;

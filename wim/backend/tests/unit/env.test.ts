@@ -14,9 +14,13 @@ const validEnv = {
   JWT_REFRESH_SECRET: 'b'.repeat(40),
 };
 
+// Produção com tudo ligado. As credenciais só são exigidas para as
+// integrações que estiverem activas — ver os testes de WHATSAPP_ENABLED.
 const productionEnv = {
   ...validEnv,
   NODE_ENV: 'production',
+  WHATSAPP_ENABLED: 'true',
+  AI_ENABLED: 'true',
   WHATSAPP_APP_SECRET: 'c'.repeat(20),
   WHATSAPP_VERIFY_TOKEN: 'd'.repeat(20),
   WHATSAPP_ACCESS_TOKEN: 'EAAG...token',
@@ -91,18 +95,43 @@ describe('parseEnv', () => {
       expect(env.NODE_ENV).toBe('production');
     });
 
-    it('exige todos os segredos, e lista os que faltam', () => {
+    it('exige os segredos das integrações ligadas, e lista os que faltam', () => {
       try {
-        parseEnv({ ...validEnv, NODE_ENV: 'production' });
+        parseEnv({
+          ...validEnv,
+          NODE_ENV: 'production',
+          WHATSAPP_ENABLED: 'true',
+          AI_ENABLED: 'true',
+          // Sem isto a validação pararia no WHATSAPP_APP_SECRET, que é
+          // obrigatório em qualquer ambiente quando a integração está ligada.
+          WHATSAPP_APP_SECRET: 'c'.repeat(20),
+        });
         expect.unreachable('devia ter lançado');
       } catch (error) {
         const issues = (error as EnvValidationError).issues.join('\n');
 
-        expect(issues).toContain('WHATSAPP_APP_SECRET');
         expect(issues).toContain('WHATSAPP_VERIFY_TOKEN');
         expect(issues).toContain('WHATSAPP_ACCESS_TOKEN');
+        expect(issues).toContain('WHATSAPP_PHONE_NUMBER_ID');
         expect(issues).toContain('ANTHROPIC_API_KEY');
       }
+    });
+
+    // Este é o caso que permite pôr o painel no ar antes de ter a conta do
+    // WhatsApp Business aprovada: produção a sério, sem credenciais da Meta.
+    it('arranca sem credenciais da Meta nem da Anthropic quando as integrações estão desligadas', () => {
+      const env = parseEnv({ ...validEnv, NODE_ENV: 'production' });
+
+      expect(env.NODE_ENV).toBe('production');
+      expect(env.WHATSAPP_ENABLED).toBe(false);
+      expect(env.AI_ENABLED).toBe(false);
+      expect(env.ANTHROPIC_API_KEY).toBeUndefined();
+    });
+
+    it('exige a chave da Anthropic apenas quando AI_ENABLED=true', () => {
+      expect(() =>
+        parseEnv({ ...validEnv, NODE_ENV: 'production', AI_ENABLED: 'true' }),
+      ).toThrow(/ANTHROPIC_API_KEY/);
     });
 
     it('recusa um segredo demasiado curto', () => {
@@ -121,6 +150,35 @@ describe('parseEnv', () => {
           JWT_REFRESH_SECRET: sameSecret,
         }),
       ).toThrow(/não pode ser igual/);
+    });
+  });
+
+  describe('interruptores das integrações', () => {
+    it('estão desligados por omissão', () => {
+      const env = parseEnv(validEnv);
+
+      expect(env.WHATSAPP_ENABLED).toBe(false);
+      expect(env.AI_ENABLED).toBe(false);
+    });
+
+    // Um webhook público sem segredo não consegue distinguir um evento da
+    // Meta de um evento forjado. Por isso esta exigência não espera por
+    // produção: vale em qualquer ambiente.
+    it('recusa ligar o WhatsApp sem o segredo que valida as assinaturas', () => {
+      expect(() => parseEnv({ ...validEnv, WHATSAPP_ENABLED: 'true' })).toThrow(
+        /WHATSAPP_APP_SECRET/,
+      );
+    });
+
+    it('em desenvolvimento, ligado e com o segredo, não exige o resto', () => {
+      const env = parseEnv({
+        ...validEnv,
+        WHATSAPP_ENABLED: 'true',
+        WHATSAPP_APP_SECRET: 'c'.repeat(20),
+      });
+
+      expect(env.WHATSAPP_ENABLED).toBe(true);
+      expect(env.WHATSAPP_ACCESS_TOKEN).toBeUndefined();
     });
   });
 

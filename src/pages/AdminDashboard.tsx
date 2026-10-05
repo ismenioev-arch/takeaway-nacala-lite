@@ -91,7 +91,7 @@ const AdminDashboard: React.FC = () => {
     
     // Fetch profiles for orders
     const userIds = ordersData?.map(o => o.user_id).filter(Boolean) || [];
-    let profilesMap: Record<string, { full_name: string | null; phone: string | null }> = {};
+    const profilesMap: Record<string, { full_name: string | null; phone: string | null }> = {};
     
     if (userIds.length > 0) {
       const { data: profilesData } = await supabase
@@ -120,7 +120,7 @@ const AdminDashboard: React.FC = () => {
     
     // Fetch profiles for messages
     const msgUserIds = messagesData?.map(m => m.user_id).filter(Boolean) || [];
-    let msgProfilesMap: Record<string, { full_name: string | null }> = {};
+    const msgProfilesMap: Record<string, { full_name: string | null }> = {};
     
     if (msgUserIds.length > 0) {
       const { data: msgProfilesData } = await supabase

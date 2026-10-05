@@ -1,0 +1,37 @@
+{
+  "name": "wim",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "WIM — WhatsApp Intelligence Manager (monorepo: painel + API)",
+  "engines": {
+    "node": ">=20"
+  },
+  "workspaces": [
+    "backend",
+    "frontend"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspace @wim/backend & npm run dev --workspace @wim/frontend",
+    "dev:backend": "npm run dev --workspace @wim/backend",
+    "dev:frontend": "npm run dev --workspace @wim/frontend",
+    "build": "npm run build --workspace @wim/frontend",
+    "build:backend": "npm run build --workspace @wim/backend",
+    "typecheck": "npm run typecheck --workspace @wim/backend && npm run typecheck --workspace @wim/frontend && tsc --noEmit --project tsconfig.api.json",
+    "lint": "npm run lint --workspace @wim/backend",
+    "test": "npm run test --workspace @wim/backend",
+    "migrate": "npm run migrate --workspace @wim/backend",
+    "migrate:status": "npm run migrate:status --workspace @wim/backend",
+    "seed": "npm run seed --workspace @wim/backend",
+    "setup:env": "npm run setup:env --workspace @wim/backend",
+    "create-user": "npm run create-user --workspace @wim/backend"
+  },
+  "comments": {
+    "@types/node": "Fixo na mesma versão dos workspaces. O @vercel/node traz a sua (20.x) e, se essa ficasse no topo da árvore, a verificação de tipos de api/ veria um Buffer diferente do que o backend vê."
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.6",
+    "@vercel/node": "^5.1.11",
+    "typescript": "^5.7.3"
+  }
+}

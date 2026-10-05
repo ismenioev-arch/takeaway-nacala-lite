@@ -17,7 +17,8 @@ As restantes escolhas da especificação mantêm-se: PostgreSQL, API REST,
 React + TypeScript no painel, Docker, Claude para a IA e a Meta WhatsApp
 Cloud API oficial.
 
-👉 Para pôr o sistema a correr: **[`06-COMO-EXECUTAR.md`](./06-COMO-EXECUTAR.md)**
+👉 Para pôr o sistema a correr localmente: **[`06-COMO-EXECUTAR.md`](./06-COMO-EXECUTAR.md)**
+👉 Para o pôr no ar (Vercel + Neon): **[`08-DEPLOY-VERCEL-NEON.md`](./08-DEPLOY-VERCEL-NEON.md)**
 
 ---
 

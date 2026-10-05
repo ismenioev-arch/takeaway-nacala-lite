@@ -6,9 +6,38 @@
  * transacção pode atravessar vários repositórios sem truques.
  */
 import pg from 'pg';
-import { getEnv } from '../config/env.js';
+import { getEnv, isServerless } from '../config/env.js';
 
 const { Pool } = pg;
+
+/**
+ * O PostgreSQL gerido (Neon, Supabase, RDS) só aceita ligações cifradas, e
+ * põe isso no próprio URL: `?sslmode=require`. O `pg`, porém, ignora o que
+ * está no URL quando lhe passamos `ssl` explicitamente — e o resultado é o
+ * erro mais confuso desta configuração: funciona em local e, em produção,
+ * devolve «the server does not support SSL connections» ou o inverso.
+ *
+ * Em vez de obrigar a acertar duas definições que dizem a mesma coisa,
+ * lemos o URL. `DATABASE_SSL=true` continua a funcionar e serve para os
+ * casos em que o URL não declara nada.
+ */
+export function shouldUseSsl(databaseUrl: string, explicit: boolean): boolean {
+  if (explicit) return true;
+  return /[?&]sslmode=(require|verify-ca|verify-full)/i.test(databaseUrl);
+}
+
+/**
+ * Quantas ligações manter abertas.
+ *
+ * Num servidor permanente há um processo e um pool: 10 ligações é razoável.
+ * Em serverless há um processo por invocação simultânea, e cada um abriria o
+ * seu pool — dez pedidos em paralelo dariam cem ligações e esgotariam o
+ * limite da base de dados. Aí o pool certo é pequeno, e quem faz a
+ * multiplexação é o pooler do lado do Neon.
+ */
+export function resolvePoolMax(configured: number, serverless: boolean): number {
+  return serverless ? Math.min(configured, 2) : configured;
+}
 
 /** Qualquer coisa capaz de executar SQL: o pool, ou um cliente em transacção. */
 export interface Queryable {
@@ -27,8 +56,10 @@ export function getPool(): pg.Pool {
 
   pool = new Pool({
     connectionString: env.DATABASE_URL,
-    max: env.DATABASE_POOL_MAX,
-    ssl: env.DATABASE_SSL ? { rejectUnauthorized: false } : false,
+    max: resolvePoolMax(env.DATABASE_POOL_MAX, isServerless(env)),
+    ssl: shouldUseSsl(env.DATABASE_URL, env.DATABASE_SSL)
+      ? { rejectUnauthorized: false }
+      : false,
     connectionTimeoutMillis: 10_000,
     idleTimeoutMillis: 30_000,
     application_name: 'wim-backend',

@@ -1,8 +1,11 @@
+/* O @import tem de vir antes de tudo o resto: é a regra do CSS, e o
+   empacotador avisava que esta linha estava fora de sítio — o que, na
+   prática, significava o risco de as tipografias não carregarem. */
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800&family=Playfair+Display:wght@400;500;600;700&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
-
-@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800&family=Playfair+Display:wght@400;500;600;700&display=swap');
 
 @layer base {
   :root {

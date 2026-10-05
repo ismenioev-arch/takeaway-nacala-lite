@@ -42,6 +42,15 @@ export class AppError extends Error {
   static conflict(message: string, details?: unknown): AppError {
     return new AppError(409, 'CONFLICT', message, details);
   }
+
+  /**
+   * O pedido é válido, o endereço existe, mas a funcionalidade não está
+   * disponível agora — por estar desligada por configuração ou por depender
+   * de um serviço externo que não respondeu.
+   */
+  static serviceUnavailable(message: string, details?: unknown): AppError {
+    return new AppError(503, 'SERVICE_UNAVAILABLE', message, details);
+  }
 }
 
 export interface ErrorResponseBody {

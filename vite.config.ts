@@ -1,4 +1,5 @@
-import { defineConfig, loadEnv } from "vite";
+import { loadEnv } from "vite";
+import { defineConfig } from "vitest/config";
 import react from "@vitejs/plugin-react-swc";
 import path from "path";
 import { componentTagger } from "lovable-tagger";
@@ -38,6 +39,15 @@ export default defineConfig(({ mode }) => {
       alias: {
         "@": path.resolve(__dirname, "./src"),
       },
+    },
+    test: {
+      // O WIM vive em `wim/` e tem a sua própria suite, com base de dados e
+      // ambiente Node. Sem esta restrição, `npm test` na raiz apanhava-a
+      // também e falhava — não por haver um defeito, mas por estar a correr
+      // testes de backend num ambiente de browser.
+      include: ["src/**/*.{test,spec}.{ts,tsx}"],
+      environment: "jsdom",
+      globals: true,
     },
   };
 });

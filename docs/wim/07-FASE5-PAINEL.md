@@ -283,6 +283,11 @@ proxy: {
 
 ## 10. O que vem a seguir
 
+**Já feito desde então — deploy:** o sistema está preparado para ir para o ar
+na Vercel com base de dados no Neon, com as integrações do WhatsApp e da IA
+desligadas por configuração. Ver
+[`08-DEPLOY-VERCEL-NEON.md`](./08-DEPLOY-VERCEL-NEON.md).
+
 **FASE 6 — Webhook do WhatsApp:**
 - Receber mensagens em tempo real
 - Armazenar no banco
