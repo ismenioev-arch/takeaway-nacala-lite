@@ -10,6 +10,7 @@ import rateLimit from '@fastify/rate-limit';
 import Fastify, { type FastifyInstance } from 'fastify';
 import { getEnv } from './config/env.js';
 import { createLogger } from './config/logger.js';
+import { registerAiRoutes } from './controllers/ai.controller.js';
 import { registerAuthRoutes } from './controllers/auth.controller.js';
 import { registerContactRoutes } from './controllers/contacts.controller.js';
 import { registerConversationRoutes } from './controllers/conversations.controller.js';
@@ -79,6 +80,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   registerConversationRoutes(app);
   registerMessageRoutes(app);
   registerSearchRoutes(app);
+  registerAiRoutes(app);
 
   return app;
 }

@@ -6,6 +6,7 @@
  * (secção 11).
  */
 import type { MessageWithContextRow } from '../dtos/message.dto.js';
+import type { MessageRow } from '../models/domain.js';
 import type { MessageDirection, MessageStatus, MessageType } from '../models/enums.js';
 import { getPool, type Queryable } from '../database/pool.js';
 import { Conditions, likePattern } from './query-builder.js';
@@ -274,4 +275,143 @@ export async function insertInboundMessage(
   );
 
   return (result.rowCount ?? 0) > 0;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Fila de análise (FASE 8)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Reivindica uma mensagem para análise, ou devolve `null` se não houver.
+ *
+ * O `UPDATE ... WHERE status = 'RECEIVED' ... RETURNING` é a reivindicação:
+ * só um processo consegue mudar a linha, e é esse que fica com o trabalho.
+ * O `FOR UPDATE SKIP LOCKED` na subconsulta faz com que dois processos em
+ * paralelo apanhem mensagens diferentes em vez de ficarem à espera um do
+ * outro — que foi exactamente o impasse que derrubou a primeira versão do
+ * webhook.
+ *
+ * Mensagens presas em `ANALYZING` há mais de `staleAfterMinutes` voltam a
+ * ser elegíveis. Isto cobre o caso real em serverless: a função é congelada
+ * a meio da chamada à Claude e ninguém volta a tocar naquela linha. Sem
+ * isto, uma mensagem perdida ficava perdida para sempre.
+ */
+export async function claimMessageForAnalysis(
+  options: { staleAfterMinutes?: number } = {},
+  db: Queryable = getPool(),
+): Promise<MessageRow | null> {
+  const staleAfter = options.staleAfterMinutes ?? 10;
+
+  const result = await db.query<MessageRow>(
+    `UPDATE messages
+        SET status = 'ANALYZING'
+      WHERE id = (
+        SELECT id FROM messages
+         WHERE direction = 'INBOUND'
+           AND (
+             status = 'RECEIVED'
+             OR (status = 'ANALYZING' AND updated_at < now() - ($1 || ' minutes')::interval)
+           )
+         ORDER BY created_at
+         FOR UPDATE SKIP LOCKED
+         LIMIT 1
+      )
+      RETURNING *`,
+    [String(staleAfter)],
+  );
+
+  return result.rows[0] ?? null;
+}
+
+/** Devolve a mensagem à fila. Usado quando a falha é transitória. */
+export async function releaseMessageToQueue(
+  id: string,
+  db: Queryable = getPool(),
+): Promise<void> {
+  await db.query(`UPDATE messages SET status = 'RECEIVED' WHERE id = $1 AND status = 'ANALYZING'`, [
+    id,
+  ]);
+}
+
+/**
+ * Marca a mensagem como falhada, com motivo.
+ *
+ * Só para falhas que não melhoram sozinhas. Uma mensagem em `FAILED` sai da
+ * fila e passa a ser problema de uma pessoa — que é o comportamento certo
+ * quando o modelo devolveu algo que não conseguimos validar.
+ */
+export async function markMessageAnalysisFailed(
+  id: string,
+  errorCode: string,
+  errorDetail: string,
+  db: Queryable = getPool(),
+): Promise<void> {
+  await db.query(
+    `UPDATE messages
+        SET status = 'FAILED', error_code = $2, error_detail = $3
+      WHERE id = $1`,
+    [id, errorCode, errorDetail.slice(0, 2000)],
+  );
+}
+
+export async function setMessageStatus(
+  id: string,
+  status: MessageStatus,
+  db: Queryable = getPool(),
+): Promise<void> {
+  await db.query(`UPDATE messages SET status = $2::message_status WHERE id = $1`, [id, status]);
+}
+
+/**
+ * As últimas mensagens da conversa, da mais antiga para a mais recente.
+ *
+ * Ordena-se por data descendente para apanhar as N mais recentes e
+ * inverte-se depois: o modelo lê melhor uma conversa na ordem em que
+ * aconteceu.
+ */
+export async function listConversationHistory(
+  conversationId: string,
+  limit: number,
+  options: { excludeMessageId?: string } = {},
+  db: Queryable = getPool(),
+): Promise<MessageRow[]> {
+  if (limit <= 0) return [];
+
+  const result = await db.query<MessageRow>(
+    `SELECT * FROM messages
+      WHERE conversation_id = $1
+        AND ($3::uuid IS NULL OR id <> $3::uuid)
+      ORDER BY wa_timestamp DESC, created_at DESC
+      LIMIT $2`,
+    [conversationId, limit, options.excludeMessageId ?? null],
+  );
+
+  return result.rows.reverse();
+}
+
+export interface AnalysisQueueStats {
+  pending: number;
+  analyzing: number;
+  failed: number;
+}
+
+/** Quantas mensagens esperam, estão a ser analisadas, ou desistiram. */
+export async function getAnalysisQueueStats(
+  db: Queryable = getPool(),
+): Promise<AnalysisQueueStats> {
+  const result = await db.query<{ status: string; count: string }>(
+    `SELECT status::text AS status, count(*)::text AS count
+       FROM messages
+      WHERE direction = 'INBOUND'
+        AND status IN ('RECEIVED', 'ANALYZING', 'FAILED')
+      GROUP BY status`,
+  );
+
+  const byStatus = new Map(result.rows.map((row) => [row.status, Number(row.count)]));
+
+  return {
+    pending: byStatus.get('RECEIVED') ?? 0,
+    analyzing: byStatus.get('ANALYZING') ?? 0,
+    failed: byStatus.get('FAILED') ?? 0,
+  };
 }

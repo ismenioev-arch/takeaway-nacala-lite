@@ -73,4 +73,5 @@ Passo a passo, com as variáveis de ambiente e o que verificar no fim:
 | [06-COMO-EXECUTAR](./docs/wim/06-COMO-EXECUTAR.md) | Correr tudo localmente |
 | [07-FASE5-PAINEL](./docs/wim/07-FASE5-PAINEL.md) | O painel: login, rotas, dados reais |
 | [09-FASE6-WEBHOOK](./docs/wim/09-FASE6-WEBHOOK.md) | Recepção de mensagens do WhatsApp |
+| [10-FASE8-IA](./docs/wim/10-FASE8-IA.md) | Análise pela IA, rascunhos e a regra de segurança |
 | [08-DEPLOY-VERCEL-NEON](./docs/wim/08-DEPLOY-VERCEL-NEON.md) | Pôr em produção |

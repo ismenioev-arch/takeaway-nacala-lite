@@ -243,10 +243,10 @@ verificam o que ficou guardado. Cobrem, entre outros:
 
 ## 8. O que vem a seguir
 
-**FASE 8 — Análise pela IA.** Cada mensagem recebida fica com
-`status = 'RECEIVED'`, e o índice `messages_pending_analysis_idx` já existe
-para servir de fila. A análise sugere prioridade, intenção, resumo e acção
-recomendada.
+**FASE 8 — Análise pela IA: feita.** Cada mensagem recebida fica com
+`status = 'RECEIVED'`, e o índice `messages_pending_analysis_idx` serve de
+fila. A partir daí, o caminho está descrito em
+[`10-FASE8-IA.md`](./10-FASE8-IA.md).
 
 **FASE 10 — Aprovação de rascunhos** e **FASE 11 — Envio**, que fecham o
 ciclo: responder ao cliente a partir do painel. A coluna `wa_message_id`

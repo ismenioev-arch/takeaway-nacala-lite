@@ -96,8 +96,47 @@ const baseSchema = z.object({
     .transform((v) => v === 'true'),
   ANTHROPIC_API_KEY: required.optional(),
   ANTHROPIC_MODEL: z.string().default('claude-opus-5'),
+  /**
+   * Para quem põe um gateway à frente da Anthropic (registo de custos,
+   * limites por equipa) ou um duplo local numa demonstração. Sem isto, a
+   * única forma de exercitar o cliente HTTP verdadeiro seria contra a
+   * Internet, com uma chave a sério.
+   */
+  ANTHROPIC_BASE_URL: z.string().url().default('https://api.anthropic.com'),
   AI_EFFORT: z.enum(['low', 'medium', 'high', 'xhigh', 'max']).default('medium'),
   AI_CONFIDENCE_THRESHOLD: z.coerce.number().min(0).max(1).default(0.9),
+
+  /** Quantas mensagens a fila processa por execução. Mantém a resposta curta. */
+  AI_BATCH_SIZE: z.coerce.number().int().min(1).max(50).default(5),
+  /** Tecto de tempo para uma chamada à Claude, em milissegundos. */
+  AI_TIMEOUT_MS: z.coerce.number().int().min(1000).max(120_000).default(45_000),
+  /**
+   * Quantas mensagens anteriores da conversa seguem no contexto.
+   *
+   * Poucas e a IA responde fora de contexto; muitas e paga-se por tokens
+   * que não mudam a classificação.
+   */
+  AI_HISTORY_LIMIT: z.coerce.number().int().min(0).max(50).default(10),
+
+  /**
+   * Segredo que autoriza quem dispara a fila de análise.
+   *
+   * A fila não tem sessão de utilizador: é chamada por um agendador (Vercel
+   * Cron ou outro). Sem segredo, qualquer pessoa na internet poderia obrigar
+   * o sistema a gastar chamadas à Claude.
+   */
+  CRON_SECRET: secret(16).optional(),
+
+  /**
+   * Num servidor permanente, processar a fila sozinho de X em X segundos.
+   *
+   * Não faz nada em serverless, onde não há processo entre pedidos.
+   */
+  AI_WORKER_ENABLED: z
+    .enum(['true', 'false'])
+    .default('false')
+    .transform((v) => v === 'true'),
+  AI_WORKER_INTERVAL_MS: z.coerce.number().int().min(1000).max(600_000).default(15_000),
 });
 
 /**
@@ -119,7 +158,10 @@ const whatsappRequired = [
   'WHATSAPP_PHONE_NUMBER_ID',
 ] as const;
 
-const aiRequired = ['ANTHROPIC_API_KEY'] as const;
+// O CRON_SECRET entra aqui pela mesma razão que o segredo do webhook: em
+// produção, um disparador de fila aberto ao mundo é um orçamento aberto ao
+// mundo.
+const aiRequired = ['ANTHROPIC_API_KEY', 'CRON_SECRET'] as const;
 
 const envSchema = baseSchema.superRefine((value, ctx) => {
   if (value.NODE_ENV === 'production') {

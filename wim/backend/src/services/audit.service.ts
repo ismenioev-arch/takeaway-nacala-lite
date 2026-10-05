@@ -30,6 +30,14 @@ export const AUDIT_ACTIONS = {
   refreshReuseDetected: 'auth.refresh_reuse_detected',
   passwordChanged: 'auth.password_changed',
   userCreated: 'auth.user_created',
+
+  // IA (secção 6.3). Aqui o autor é sempre o sistema — `user_id` fica a
+  // NULL de propósito, porque foi mesmo a máquina que decidiu. O que
+  // importa registar é *o quê* e *porquê*: a decisão do nível de automação
+  // vai no `new_value`, com a razão em português, para que a pergunta «por
+  // que é que esta resposta saiu sozinha?» tenha sempre resposta.
+  analysisCompleted: 'ai.analysis_completed',
+  analysisFailed: 'ai.analysis_failed',
 } as const;
 
 export type AuditAction = (typeof AUDIT_ACTIONS)[keyof typeof AUDIT_ACTIONS];

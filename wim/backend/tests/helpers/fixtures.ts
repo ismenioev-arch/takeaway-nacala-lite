@@ -195,3 +195,83 @@ export async function createThread(): Promise<{
   const messageId = await createMessage(conversationId, contactId);
   return { contactId, conversationId, messageId };
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Contexto da empresa — o que a IA pode saber (FASE 8)
+// ─────────────────────────────────────────────────────────────────────────────
+
+export async function createCompanyProfile(
+  overrides: {
+    name?: string;
+    businessHours?: Record<string, string>;
+    autoReplyEnabled?: boolean;
+    policies?: string | null;
+  } = {},
+): Promise<void> {
+  await getPool().query(
+    `INSERT INTO company_profile (id, name, business_hours, auto_reply_enabled, policies)
+     VALUES (1, $1, $2::jsonb, $3, $4)
+     ON CONFLICT (id) DO UPDATE SET
+       name = EXCLUDED.name,
+       business_hours = EXCLUDED.business_hours,
+       auto_reply_enabled = EXCLUDED.auto_reply_enabled,
+       policies = EXCLUDED.policies`,
+    [
+      overrides.name ?? 'Construções Nacala',
+      JSON.stringify(overrides.businessHours ?? { 'segunda a sexta': '08:00-17:00' }),
+      overrides.autoReplyEnabled ?? false,
+      overrides.policies ?? null,
+    ],
+  );
+}
+
+export async function createService(
+  overrides: { name?: string; description?: string } = {},
+): Promise<string> {
+  const n = nextSequence();
+  const result = await getPool().query<{ id: string }>(
+    `INSERT INTO company_services (name, description) VALUES ($1, $2) RETURNING id`,
+    [overrides.name ?? `Serviço ${n}`, overrides.description ?? null],
+  );
+  return result.rows[0]!.id;
+}
+
+export async function createPrice(overrides: {
+  serviceId?: string | null;
+  label?: string;
+  amount?: number;
+  /** Falso por omissão, como na base de dados: autorizar é sempre explícito. */
+  authorized?: boolean;
+}): Promise<string> {
+  const n = nextSequence();
+  const result = await getPool().query<{ id: string }>(
+    `INSERT INTO company_prices (service_id, label, amount, is_authorized_for_ai)
+     VALUES ($1, $2, $3, $4) RETURNING id`,
+    [
+      overrides.serviceId ?? null,
+      overrides.label ?? `Preço ${n}`,
+      overrides.amount ?? 1000,
+      overrides.authorized ?? false,
+    ],
+  );
+  return result.rows[0]!.id;
+}
+
+export async function createFaq(
+  overrides: { question?: string; answer?: string } = {},
+): Promise<string> {
+  const n = nextSequence();
+  const result = await getPool().query<{ id: string }>(
+    `INSERT INTO company_faqs (question, answer) VALUES ($1, $2) RETURNING id`,
+    [overrides.question ?? `Pergunta ${n}?`, overrides.answer ?? `Resposta ${n}.`],
+  );
+  return result.rows[0]!.id;
+}
+
+export async function setSetting(key: string, value: unknown): Promise<void> {
+  await getPool().query(
+    `INSERT INTO settings (key, value) VALUES ($1, $2::jsonb)
+     ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`,
+    [key, JSON.stringify(value)],
+  );
+}

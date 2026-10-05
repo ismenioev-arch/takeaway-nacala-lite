@@ -297,6 +297,24 @@ da Meta de um evento forjado por qualquer pessoa que descubra o URL.
 |---|---|
 | `AI_ENABLED` | `true` |
 | `ANTHROPIC_API_KEY` | a chave |
+| `CRON_SECRET` | inventado por si: `openssl rand -base64 48` |
+
+As duas últimas são exigidas em produção quando `AI_ENABLED=true`, e o
+deploy falha a arrancar sem elas. O `CRON_SECRET` protege
+`/api/ai/analyze`, que é o endereço que faz o sistema gastar chamadas à
+Claude — sem segredo, qualquer pessoa que descubra o URL podia disparar a
+fila à vontade. Definido nas variáveis do projecto, a Vercel envia-o
+automaticamente nas invocações do seu cron.
+
+**A fila precisa de quem a chame.** O `vercel.json` traz um cron **diário**,
+porque o plano Hobby recusa no deploy qualquer agenda mais frequente — uma
+entrada `*/5 * * * *` não ficaria lenta, rebentava com o deploy inteiro.
+Para uma caixa de WhatsApp a sério, ponha um agendador externo gratuito
+(cron-job.org, GitHub Actions) a chamar
+`POST https://o-seu-dominio/api/ai/analyze` de dois em dois minutos, com o
+cabeçalho `Authorization: Bearer <CRON_SECRET>`. No plano Pro, basta mudar
+a agenda no `vercel.json`. Os detalhes estão em
+[`10-FASE8-IA.md`](./10-FASE8-IA.md), secção 5.
 
 ---
 
@@ -317,8 +335,10 @@ São algumas escritas na base de dados, dezenas de milissegundos. Se falhar,
 devolve 500 e a Meta reenvia; a idempotência garante que o reenvio não
 duplica nada.
 
-Quando a análise pela IA entrar (FASE 8) — essa sim, lenta — o caminho certo
-é uma fila de trabalho, e não voltar às promessas soltas.
+A análise pela IA (FASE 8) — essa sim, lenta — seguiu exactamente esse
+princípio: não corre dentro do webhook. As mensagens ficam em fila e são
+processadas noutro pedido, disparado por um agendador. Ver
+[`10-FASE8-IA.md`](./10-FASE8-IA.md).
 
 ### 7.2 Demasiadas ligações à base de dados
 

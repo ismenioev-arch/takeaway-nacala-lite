@@ -26,6 +26,7 @@ const productionEnv = {
   WHATSAPP_ACCESS_TOKEN: 'EAAG...token',
   WHATSAPP_PHONE_NUMBER_ID: '123456789',
   ANTHROPIC_API_KEY: 'sk-ant-xxx',
+  CRON_SECRET: 'e'.repeat(24),
 };
 
 describe('parseEnv', () => {
@@ -114,6 +115,9 @@ describe('parseEnv', () => {
         expect(issues).toContain('WHATSAPP_ACCESS_TOKEN');
         expect(issues).toContain('WHATSAPP_PHONE_NUMBER_ID');
         expect(issues).toContain('ANTHROPIC_API_KEY');
+        // O disparador da fila de análise é um endpoint público; sem
+        // segredo, qualquer pessoa poderia gastar chamadas à Claude.
+        expect(issues).toContain('CRON_SECRET');
       }
     });
 
@@ -126,6 +130,17 @@ describe('parseEnv', () => {
       expect(env.WHATSAPP_ENABLED).toBe(false);
       expect(env.AI_ENABLED).toBe(false);
       expect(env.ANTHROPIC_API_KEY).toBeUndefined();
+    });
+
+    it('exige o segredo do agendador quando a IA está ligada', () => {
+      expect(() =>
+        parseEnv({
+          ...validEnv,
+          NODE_ENV: 'production',
+          AI_ENABLED: 'true',
+          ANTHROPIC_API_KEY: 'sk-ant-xxx',
+        }),
+      ).toThrow(/CRON_SECRET/);
     });
 
     it('exige a chave da Anthropic apenas quando AI_ENABLED=true', () => {
